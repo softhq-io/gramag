@@ -1,0 +1,41 @@
+# fly.toml app configuration file generated for gramag-proto on 2026-04-15T09:51:00+02:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'gramag-proto'
+primary_region = 'fra'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  FALKORDB_DATA_DIR = '/data/falkor'
+  FALKORDB_GRAPH = 'gramag'
+  FALKORDB_HOST = '127.0.0.1'
+  FALKORDB_PORT = '6379'
+  PROTO_CACHE_DIR = '/data/cache'
+  PROTO_ROOT = '/data/source'
+
+[[mounts]]
+  source = 'gramag_data'
+  destination = '/data'
+  initial_size = '3gb'
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = 'suspend'
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '15s'
+    method = 'GET'
+    path = '/health'
+
+[[vm]]
+  size = 'shared-cpu-2x'
+  memory = '2gb'

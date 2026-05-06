@@ -1,0 +1,752 @@
+[
+  {
+    "id": "spare-bearing",
+    "scope": "smb",
+    "query": "Welche Bestellnummer hat das Rillenkugellager in der Umlenkrolle x22781 und wie viele Stück pro Baugruppe?",
+    "hits": [
+      {
+        "idx": 1,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "600A021408001_WP.pdf",
+        "page": 14,
+        "name": null,
+        "score": 0.886
+      },
+      {
+        "idx": 2,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "600A021408001_WP.pdf",
+        "page": 9,
+        "name": null,
+        "score": 0.837
+      },
+      {
+        "idx": 3,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "600A021408001_WP.pdf",
+        "page": 3,
+        "name": null,
+        "score": 0.788
+      },
+      {
+        "idx": 4,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "600A021408001_WP.pdf",
+        "page": 13,
+        "name": null,
+        "score": 0.727
+      },
+      {
+        "idx": 5,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "600A021408001_WP.pdf",
+        "page": 15,
+        "name": null,
+        "score": 0.72
+      },
+      {
+        "idx": 6,
+        "label": "ImageAsset",
+        "machine": "SMB",
+        "doc": "SMB.gif",
+        "page": null,
+        "name": "SMB.gif",
+        "score": 0.459
+      }
+    ],
+    "text_only": {
+      "answer": "Das Rillenkugellager in der Baugruppe **Umlenkrolle x22781** hat die Bestellnummer **4581** [CITE: SMB / 600A021408001_WP.pdf / page 13].\n\nPro Baugruppe sind **2 Stück** verbaut [CITE: SMB / 600A021408001_WP.pdf / page 13].",
+      "latency_s": 3.7,
+      "words": 31,
+      "cited_refs": 0,
+      "sentences": 4
+    },
+    "multimodal": {
+      "answer": "Das Rillenkugellager in der Baugruppe **Umlenkrolle x22781_** hat die folgenden Spezifikationen:\n\n*   **Bestellnummer (Best.-Nr.):** 4581\n*   **Stückzahl:** 2 Stück pro Baugruppe\n*   **Position:** Item 3\n\n[CITE: SMB / 600A021408001_WP.pdf / page 13]",
+      "latency_s": 5.4,
+      "words": 32,
+      "cited_refs": 0,
+      "sentences": 3
+    }
+  },
+  {
+    "id": "power-supply-location",
+    "scope": "smb",
+    "query": "Wo sitzen die Schaltnetzteile T14 und T15 im Gehäuse und welche Klemmleiste ist darunter?",
+    "hits": [
+      {
+        "idx": 1,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "IS3027.PDF",
+        "page": 1,
+        "name": null,
+        "score": 0.812
+      },
+      {
+        "idx": 2,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "IS3027.PDF",
+        "page": 2,
+        "name": null,
+        "score": 0.689
+      },
+      {
+        "idx": 3,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "S03016.PDF",
+        "page": 7,
+        "name": null,
+        "score": 0.687
+      },
+      {
+        "idx": 4,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "IS3027.PDF",
+        "page": 13,
+        "name": null,
+        "score": 0.686
+      },
+      {
+        "idx": 5,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "320A011408001_CE_deutsch.pdf",
+        "page": 1,
+        "name": null,
+        "score": 0.68
+      },
+      {
+        "idx": 6,
+        "label": "ImageAsset",
+        "machine": "SMB",
+        "doc": "SMB.gif",
+        "page": null,
+        "name": "SMB.gif",
+        "score": 0.432
+      }
+    ],
+    "text_only": {
+      "answer": "Die Schaltnetzteile **T14** und **T15** befinden sich im Schaltschrank auf der linken Seite der zweiten Montageschiene von oben [CITE: SMB / IS3027.PDF / page 2].\n\nDirekt unter diesen beiden Netzteilen ist die Klemmleiste **X1** auf der darunterliegenden Schiene montiert [CITE: SMB / IS3027.PDF / page 2]. Gemäß dem Schaltplan handelt es sich bei T14 und T15 um 24VDC-Netzteile mit einem Ausgangsstrom von 2,5A [CITE: SMB / IS3027.PDF / page 13].",
+      "latency_s": 5.7,
+      "words": 70,
+      "cited_refs": 0,
+      "sentences": 6
+    },
+    "multimodal": {
+      "answer": "Die Schaltnetzteile T14 und T15 sind im oberen Bereich des Schaltnetzteilgehäuses nebeneinander montiert, wobei **T14 auf der linken Seite** und **T15 auf der rechten Seite** sitzt [CITE: SMB / IS3027.PDF / page 13].\n\nDirekt unterhalb dieser beiden Einheiten befindet sich die Klemmleiste **X21** [CITE: SMB / IS3027.PDF / page 13].\n\nZusätzliche Details zur Klemmleiste X21:\n*   Sie dient dem Geräteanschluss der Schaltnetzteile und ist horizontal zentriert unter T14/T15 angeordnet [CITE: SMB / IS3027.PDF / page 13].\n*   Die Klemmleiste verfügt über 8 Positionen, die paarweise gebrückt sind: **PE/PE**, **L1/L1**, **L2/L2** und **L3/L3** [CITE: SMB / IS3027.PDF / page 13].\n*   Die Zuleitungen von T14 und T15 (Anschlüsse 1, 2, 3 und PE) führen von oben in die Klemmleiste, während die externen Anschlüsse (von Q1 und X20/PE-13) von unten kommen [CITE: SMB / IS3027.PDF / page 13].",
+      "latency_s": 7.4,
+      "words": 136,
+      "cited_refs": 0,
+      "sentences": 10
+    }
+  },
+  {
+    "id": "out-of-sequence",
+    "scope": "adressiersystem-gui-netjet-1-cag-161-1204-007-00",
+    "query": "Adressiersystem meldet 'Out of Sequence' — welche Registry-Parameter prüfen und welche Defaultwerte gelten?",
+    "hits": [
+      {
+        "idx": 1,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN001B_-_Out_of_Sequence_&_Page_Differential_Errors_Exp_.pdf",
+        "page": 3,
+        "name": null,
+        "score": 0.724
+      },
+      {
+        "idx": 2,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN001B_-_Out_of_Sequence_&_Page_Differential_Errors_Exp_.pdf",
+        "page": 4,
+        "name": null,
+        "score": 0.715
+      },
+      {
+        "idx": 3,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN001B_-_Out_of_Sequence_&_Page_Differential_Errors_Exp_.pdf",
+        "page": 1,
+        "name": null,
+        "score": 0.677
+      },
+      {
+        "idx": 4,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN007B - Emulator Setup and Operation.pdf",
+        "page": 9,
+        "name": null,
+        "score": 0.645
+      },
+      {
+        "idx": 5,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN007B - Emulator Setup and Operation.pdf",
+        "page": 7,
+        "name": null,
+        "score": 0.636
+      },
+      {
+        "idx": 6,
+        "label": "ImageAsset",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "schwarz.bmp.bw.bmp",
+        "page": null,
+        "name": "schwarz.bmp.bw.bmp",
+        "score": 0.405
+      }
+    ],
+    "text_only": {
+      "answer": "Bei einer „Out of Sequence“-Fehlermeldung meldet ein Imager, der weiter vom Sensor entfernt ist (downstream), den Abschluss eines Druckvorgangs an die GUI, bevor der näher am Sensor befindliche Imager (upstream) dies tut [CITE: Adressiersystem / IJAN001B_-_Out_of_Sequence_&",
+      "latency_s": 10.3,
+      "words": 36,
+      "cited_refs": 0,
+      "sentences": 1
+    },
+    "multimodal": {
+      "answer": "Bei einem „Out of Sequence“-Fehler im Adressiersystem sind folgende Informationen relevant:\n\n*   **Registry-Pfad:** Die Einstellungen befinden sich unter `HKEY_LOCAL_MACHINE\\SOFTWARE\\inc.jet\\GUI\\Settings\\` [CITE: Adressiersystem / IJAN001B_-_Out_of_Sequence_&_Page_Differential_Errors_Exp_.",
+      "latency_s": 13.8,
+      "words": 23,
+      "cited_refs": 0,
+      "sentences": 2
+    }
+  },
+  {
+    "id": "gui-hardware",
+    "scope": "adressiersystem-gui-netjet-1-cag-161-1204-007-00",
+    "query": "Welche Hardware-Konfiguration wird für den NetJet 1 GUI empfohlen?",
+    "hits": [
+      {
+        "idx": 1,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN001B_-_Out_of_Sequence_&_Page_Differential_Errors_Exp_.pdf",
+        "page": 1,
+        "name": null,
+        "score": 0.613
+      },
+      {
+        "idx": 2,
+        "label": "ImageAsset",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "schwarz.bmp.bw.bmp",
+        "page": null,
+        "name": "schwarz.bmp.bw.bmp",
+        "score": 0.437
+      },
+      {
+        "idx": 3,
+        "label": "ConfigFile",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "I_2019_09_02_07_08_42.txt",
+        "page": null,
+        "name": "I_2019_09_02_07_08_42.txt",
+        "score": 0.408
+      },
+      {
+        "idx": 4,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN007B - Emulator Setup and Operation.pdf",
+        "page": 9,
+        "name": null,
+        "score": 0.408
+      },
+      {
+        "idx": 5,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN007B - Emulator Setup and Operation.pdf",
+        "page": 2,
+        "name": null,
+        "score": 0.406
+      },
+      {
+        "idx": 6,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN007B - Emulator Setup and Operation.pdf",
+        "page": 3,
+        "name": null,
+        "score": 0.403
+      }
+    ],
+    "text_only": {
+      "answer": "Die bereitgestellten Dokumente enthalten keine spezifischen Empfehlungen zur PC-Hardware-Konfiguration (wie Prozessor, Arbeitsspeicher oder Betriebssystem) für die NetJet 1 GUI.\n\nDie Unterlagen zum **V4 Emulator** führen lediglich softwareseitige Einstellungen und Bedienungselemente auf:\n*   **Imager-Unterstützung:** Der Emulator verfügt über",
+      "latency_s": 10.7,
+      "words": 37,
+      "cited_refs": 0,
+      "sentences": 2
+    },
+    "multimodal": {
+      "answer": "Basierend auf den bereitgestellten Dokumenten sind keine spezifischen Empfehlungen für die Hardware-Konfiguration der NetJet 1 GUI (wie z. B. Anforderungen an Prozessor, Arbeitsspeicher oder Betriebssystem) enthalten.\n\nDie vorliegenden Unterlagen beschreiben folgende Aspekte:\n*   **Fehlerprüfung:** Die Dokumentation IJAN001B erläutert die Prüfung von \"Out of Sequence\"- und \"Page Differential\"-Fehlern [CITE: Adressiersystem GUI NetJet 1 / IJAN001B_-_Out_of_Sequence_&_Page_Differential_Errors_Exp_.pdf / page 1].\n*   **System-Logs:** Ein Diagnose-Log zeigt eine Konfiguration mit drei Imagern (Imager 1, 2 und 3) und den dazugehörigen Tintenpatronen (Pens B, C und D), wobei Fehler bei der Patronen-ID und der Imager-Kommunikation aufgezeichnet wurden [CITE: Adressiersystem GUI NetJet 1 / config: I_2019_09_02_07_08_42.txt].\n*   **Emulator-Software:** Das Dokument IJAN007B behandelt die Einrichtung und Bedienung eines V4-Emulators, einschließlich Menüoptionen wie \"Save Bitmaps\" und \"Settings\" (z. B. Repeat Length, Pixels Used per Page), enthält jedoch keine Hardware-Mindestanforderungen [CITE: Adressiersystem GUI NetJet 1 / IJAN007B - Emulator Setup and Operation.pdf / page 3, 9].",
+      "latency_s": 12.3,
+      "words": 146,
+      "cited_refs": 0,
+      "sentences": 8
+    }
+  },
+  {
+    "id": "abb-bitmap",
+    "scope": "adressiersystem-gui-netjet-1-cag-161-1204-007-00",
+    "query": "Co zawiera bitmapa ABB_600.bmp i dla jakiego typu przesyłek jest przeznaczona?",
+    "hits": [
+      {
+        "idx": 1,
+        "label": "ConfigFile",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "ENIWA619_MUSTER.TXT",
+        "page": null,
+        "name": "ENIWA619_MUSTER.TXT",
+        "score": 0.347
+      },
+      {
+        "idx": 2,
+        "label": "ImageAsset",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "schwarz.bmp",
+        "page": null,
+        "name": "schwarz.bmp",
+        "score": 0.319
+      },
+      {
+        "idx": 3,
+        "label": "ImageAsset",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "schwarz.bmp.bw.bmp",
+        "page": null,
+        "name": "schwarz.bmp.bw.bmp",
+        "score": 0.315
+      },
+      {
+        "idx": 4,
+        "label": "ImageAsset",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "purge.bmp",
+        "page": null,
+        "name": "purge.bmp",
+        "score": 0.313
+      },
+      {
+        "idx": 5,
+        "label": "ImageAsset",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "HP_Deckblatt_0209_300.bmp",
+        "page": null,
+        "name": "HP_Deckblatt_0209_300.bmp",
+        "score": 0.302
+      },
+      {
+        "idx": 6,
+        "label": "ImageAsset",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "ABB_600.bmp",
+        "page": null,
+        "name": "ABB_600.bmp",
+        "score": 0.178
+      }
+    ],
+    "text_only": {
+      "answer": "Bitmapa `ABB_600.bmp` zawiera następujące elementy:\n*   Logotyp firmy **ABB** umieszczony w centralnej części.\n*   Oznaczenie rodzaju przesyłki **A-Post** w lewym górnym rogu.\n*   Napis **Boutique** w prawym górnym rogu.\n*   Oznaczenie opłaty pocztowej **P.P. / Journal** w lewym dolnym rogu.\n*   Miejscowość nadania **CH-5401 Baden** w prawym dolnym rogu.\n*   Kod kwadratowy 2D (DataMatrix) znajdujący się po prawej stronie logotypu ABB.\n\nBitmapa jest przeznaczona dla przesyłek pocztowych typu **A-Post** oraz przesyłek typu **Journal** (gazety/czasopisma) nadawanych przez firmę ABB z siedzibą w Baden [CITE: Adressiersystem GUI NetJet 1 / ABB_600.bmp].",
+      "latency_s": 7.2,
+      "words": 89,
+      "cited_refs": 0,
+      "sentences": 9
+    },
+    "multimodal": {
+      "answer": "Bitmapa `ABB_600.bmp` to cyfrowy szablon znaku opłaty pocztowej Poczty Szwajcarskiej (Die Post) [CITE: Adressiersystem / image: ABB_600.bmp].\n\n**Zawartość bitmapy:**\n*   **Kod DataMatrix:** Duży kod 2D umieszczony w lewym górnym rogu [CITE: Adressiersystem / image: ABB_600.bmp].\n*   **Tekst:** Oznaczenia „GAS/ECR/ICR” oraz instrukcja „nicht frankieren” (nie frankować) wraz z jej odpowiednikami w języku francuskim („ne pas affranchir”) i włoskim („non affrancare”) [CITE: Adressiersystem / image: ABB_600.bmp].\n*   **Numery identyfikacyjne:** 50778415 oraz 000435 [CITE: Adressiersystem / image: ABB_600.bmp].\n*   **Symbole i logotypy:** \n    *   Duża litera „A” w lewym dolnym rogu (oznaczająca przesyłkę priorytetową A-Post).\n    *   Logo „pro clima” (przedstawiające osobę i drzewo).\n    *   Logo Poczty Szwajcarskiej („DIE POST” wraz z symbolem krzyża) [CITE: Adressiersystem / image: ABB_600.bmp].\n\n**Przeznaczenie:**\nSzablon jest przeznaczony dla **biznesowych przesyłek zwrotnych** (niem. *Geschäftsantwortsendungen*), o czym świadczy napis „nicht frankieren” (opłatę uiszcza odbiorca) oraz dla przesyłek typu **A-Post** [CITE: Adressiersystem / image: ABB_600.bmp].",
+      "latency_s": 6.8,
+      "words": 143,
+      "cited_refs": 0,
+      "sentences": 10
+    }
+  },
+  {
+    "id": "eniwa-job",
+    "scope": "adressiersystem-gui-netjet-1-cag-161-1204-007-00",
+    "query": "Jakie parametry ma zadanie ENIWA — jaki format, jakie liczniki, ile rekordów?",
+    "hits": [
+      {
+        "idx": 1,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN005A_-_GUI_Hardware_Configuration_Guidelines.pdf",
+        "page": 2,
+        "name": null,
+        "score": 0.621
+      },
+      {
+        "idx": 2,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN001B_-_Out_of_Sequence_&_Page_Differential_Errors_Exp_.pdf",
+        "page": 3,
+        "name": null,
+        "score": 0.616
+      },
+      {
+        "idx": 3,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN005A_-_GUI_Hardware_Configuration_Guidelines.pdf",
+        "page": 5,
+        "name": null,
+        "score": 0.614
+      },
+      {
+        "idx": 4,
+        "label": "ManualSection",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "IJAN005A_-_GUI_Hardware_Configuration_Guidelines.pdf",
+        "page": 3,
+        "name": null,
+        "score": 0.613
+      },
+      {
+        "idx": 5,
+        "label": "ImageAsset",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "HP_Deckblatt_0209_300.bmp",
+        "page": null,
+        "name": "HP_Deckblatt_0209_300.bmp",
+        "score": 0.419
+      },
+      {
+        "idx": 6,
+        "label": "ConfigFile",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "ESTEE919A.TXT",
+        "page": null,
+        "name": "ESTEE919A.TXT",
+        "score": 0.336
+      }
+    ],
+    "text_only": {
+      "answer": "Zadanie **ENIWA** (numer P47801) dla klienta Eniwa AG charakteryzuje się następującymi parametrami:\n\n*   **Format:** 235 x 125 mm [CITE: Adressiersystem GUI NetJet 1 CAG-161.1204.007.00 / image: ENIWA_0209_300.bmp].\n*   **Liczniki (Zähler):**\n    *   Zähler 1: **1**\n    *   Zähler 2: **1** [CITE: Adressiersystem GUI NetJet 1 CAG-161.1204.007.00 / image: ENIWA_0209_300.bmp].\n*   **Liczba rekordów:** Zadanie obejmuje **11 300** rekordów (oznaczonych jako „Anzahl Datensätze” oraz „11300 Adr.”) [CITE: Adressiersystem GUI NetJet 1 CAG-161.1204.007.00 / image: ENIWA_0209_300.bmp].\n\nDodatkowe informacje o zadaniu:\n*   **Zleceniodawca:** brain'print GmbH.\n*   **Data/Godzina:** 02.09. 11:34 [CITE: Adressiersystem GUI NetJet 1 CAG-161.1204.007.00 / image: ENIWA_0209_300.bmp].",
+      "latency_s": 6.0,
+      "words": 92,
+      "cited_refs": 0,
+      "sentences": 11
+    },
+    "multimodal": {
+      "answer": "Na podstawie dostarczonych materiałów dowodowych, informacje dotyczące konkretnego zadania o nazwie **ENIWA** są nieobecne.\n\nDostarczone dokumenty zawierają jedynie:\n*   Wytyczne dotyczące konfiguracji sprzętowej GUI dla systemów inc.jet (parametry takie jak *Warming Pulse*, *Pen Driver Parameters*, *Pulse Length*) [CITE: Adressiersystem GUI NetJet 1 / IJAN005A_-_GUI_Hardware_Configuration_Guidelines.pdf / page 5].\n*   Dane dla zadania klienta **Estee Lauder** (plik `ESTEE919A.TXT`), które obejmuje 6568 rekordów adresowych (*6568 Adr.*), licznik o nazwie **ZAEHLER** oraz 60-cyfrowy ciąg kontrolny **DAMA** [CITE: Adressiersystem GUI NetJet 1 / config: ESTEE919A.TXT].\n\nW przekazanej dokumentacji nie ma wzmianki o formacie, licznikach ani liczbie rekordów dla zadania ENIWA.",
+      "latency_s": 8.3,
+      "words": 95,
+      "cited_refs": 0,
+      "sentences": 8
+    }
+  },
+  {
+    "id": "cmc-heizungen",
+    "scope": "folieneinschlag-und-adressieranlage-cmc-2800-nr-4282",
+    "query": "Wo sitzen die Heizungen an der CMC 2800 und welche Schemata gibt es dafür?",
+    "hits": [
+      {
+        "idx": 1,
+        "label": "ManualSection",
+        "machine": "Folieneinschlag- und Adressieranlage   CMC 2800   Nr 4282",
+        "doc": "Heizungen unten.pdf",
+        "page": 3,
+        "name": null,
+        "score": 0.695
+      },
+      {
+        "idx": 2,
+        "label": "ManualSection",
+        "machine": "Folieneinschlag- und Adressieranlage   CMC 2800   Nr 4282",
+        "doc": "Heizungen unten.pdf",
+        "page": 2,
+        "name": null,
+        "score": 0.632
+      },
+      {
+        "idx": 3,
+        "label": "ManualSection",
+        "machine": "Folieneinschlag- und Adressieranlage   CMC 2800   Nr 4282",
+        "doc": "Heizungen Schema.pdf",
+        "page": 1,
+        "name": null,
+        "score": 0.625
+      },
+      {
+        "idx": 4,
+        "label": "ManualSection",
+        "machine": "Folieneinschlag- und Adressieranlage   CMC 2800   Nr 4282",
+        "doc": "Seriennummern.pdf",
+        "page": 1,
+        "name": null,
+        "score": 0.601
+      },
+      {
+        "idx": 5,
+        "label": "ImageAsset",
+        "machine": "Folieneinschlag- und Adressieranlage   CMC 2800   Nr 4282",
+        "doc": "CSA.PCX",
+        "page": null,
+        "name": "CSA.PCX",
+        "score": 0.419
+      },
+      {
+        "idx": 6,
+        "label": "ConfigFile",
+        "machine": "Folieneinschlag- und Adressieranlage   CMC 2800   Nr 4282",
+        "doc": "IKEA  READ AND PRINT.JOB.txt",
+        "page": null,
+        "name": "IKEA  READ AND PRINT.JOB.txt",
+        "score": 0.398
+      }
+    ],
+    "text_only": {
+      "answer": "An der CMC 2800 (Nr. 4282) sind die Heizungen an mehreren Positionen verbaut, für die spezifische mechanische und elektrische Unterlagen vorliegen:\n\n### 1. Positionen der Heizungen\n*   **Heizungen unten:** Es gibt eine dedizierte Baugruppe für die unteren Heizungen [CITE: CMC 2800 / Nr 4282 / Heizungen unten.pdf / page 2].\n*   **Schweiß- und Schneidevorrichtung:** Laut Schaltplan sind Heizwiderstände für den Schweißbalken (**Resistenza barra saldante**) und für den Schnitt (**Resistenza taglio**) vorhanden [CITE: CMC 2800 / Nr 4282 / Heizungen Schema.pdf / page 1].\n*   **Schrumpftunnel (Forno):** Die Anlage umfasst einen Tunnel des Typs **FORNO R1** mit der Matrikelnummer 004314 [CITE: CMC 2800 / Nr 4282 / Seriennummern.pdf / page 1].\n\n### 2. Verfügbare Schemata und technische Details\n*   **Mechanisches Schema (Heizungen unten):**\n    *   Die Zeichnung zeigt den Aufbau der unteren Heizeinheit.\n    *   Zentrales Bauteil ist der **Heizwiderstand 230V 1000W** (Pos. 1) [CITE: CMC 2800 / Nr 4282 / Heizungen unten.pdf / page 2].\n    *   Die Montage umfasst zudem Halterungen (Pos. 2), Isolierungen (Pos. 3) und spezifische Abdeckungen (Pos. 5) [CITE: CMC 2800 / Nr 4282 / Heizungen unten.pdf / page 3].\n*   **Elektrisches Schema (Heizungen Schema):**\n    *   Das Dokument \"SCHEMA ELETTR",
+      "latency_s": 10.0,
+      "words": 191,
+      "cited_refs": 0,
+      "sentences": 18
+    },
+    "multimodal": {
+      "answer": "An der CMC 2800 (speziell für die Anlage Nr. 4282 bzw. den Ofen „FORNO R1“) befinden sich die Heizungen im Bereich des Ofens, aufgeteilt in eine obere und eine untere Gruppe [CITE: CMC 2800 / Heizungen Schema.pdf / page 1] [CITE: CMC 2800 / Seriennummern.pdf / page 1]:\n\n### Standorte und Komponenten\n*   **Untere Heizgruppe (GRUPPO CAPPA INFERIORE):** Diese befindet sich in der unteren Haube des Ofens. Laut Stückliste (Tavola 4VT1417) sind hier **6 Widerstände** (Pos. 75, Art.-Nr. **1902470**, RESISTENZA AL. 220V 3000W L1550) verbaut [CITE: CMC 2800 / Heizungen unten.pdf / page 3].\n*   **Obere Heizgruppe (GRUPPO RESISTENZE SUPERIORI):** Diese befindet sich im oberen Teil des Ofens [CITE: CMC 2800 / Heizungen Schema.pdf / page 1].\n\n### Verfügbare Schemata\nEs existiert ein spezifischer Elektroplan für die Ofenheizungen:\n*   **Dokument:** „RESISTENZE FORNO / HEIZUNGEN OFEN“ (Zeichnungsnummer 0973502, Blatt 4) [CITE: CMC 2800 / Heizungen Schema.pdf / page 1].\n\n**Details aus dem Schema:**\n*   **Obere Gruppe (EH4.1 – EH4.8):** Besteht aus insgesamt 8 Heizelementen (6x 2000W und 2x 3000W), die über den Schaltschütz **KM5.1** (Typ D50B7) und den Hauptschalter **QU4.1** (40A) gesteuert werden [CITE: CMC 2800 / Heizungen Schema.pdf / page 1].\n*   **Untere Gruppe (EH4.9 – EH4.14):** Besteht aus 6 Heizelementen (alle 3000W), gesteuert über den Schaltschütz **KM5.2** (Typ D50B7) und den Hauptschalter **QU4.2** (40A) [CITE: CMC 2800 / Heizungen Schema.pdf / page 1].\n*   **Anschluss:** Die Heizungen sind für 230V ausgelegt und auf die drei Phasen (U1.1, V1.1, W1.1) verteilt [CITE: CMC 2800 / Heizungen Schema.pdf / page 1].",
+      "latency_s": 10.8,
+      "words": 250,
+      "cited_refs": 0,
+      "sentences": 25
+    }
+  },
+  {
+    "id": "smb-transport",
+    "scope": "smb",
+    "query": "Wie transportiere ich die SMB S03? Wo sind die Hebepunkte markiert?",
+    "hits": [
+      {
+        "idx": 1,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "d00678a.pdf",
+        "page": 6,
+        "name": null,
+        "score": 0.724
+      },
+      {
+        "idx": 2,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "d00678a.pdf",
+        "page": 21,
+        "name": null,
+        "score": 0.689
+      },
+      {
+        "idx": 3,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "S03016.PDF",
+        "page": 9,
+        "name": null,
+        "score": 0.689
+      },
+      {
+        "idx": 4,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "d00709a.pdf",
+        "page": 6,
+        "name": null,
+        "score": 0.688
+      },
+      {
+        "idx": 5,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "d01210a.pdf",
+        "page": 1,
+        "name": null,
+        "score": 0.655
+      },
+      {
+        "idx": 6,
+        "label": "ImageAsset",
+        "machine": "SMB",
+        "doc": "SMB.gif",
+        "page": null,
+        "name": "SMB.gif",
+        "score": 0.339
+      }
+    ],
+    "text_only": {
+      "answer": "Basierend auf den bereitgestellten Unterlagen können folgende Informationen zum Transport der SMB S03 gegeben werden:\n\n*   **Maschinengewicht:** Beim Transport ist zu beachten, dass die SMB S03 ein Gewicht von ca. **300 kg** aufweist [CITE: SMB / d00678a.pdf / page 6",
+      "latency_s": 10.7,
+      "words": 40,
+      "cited_refs": 0,
+      "sentences": 3
+    },
+    "multimodal": {
+      "answer": "Basierend auf den vorliegenden Unterlagen sind keine spezifischen Anweisungen zum Transportvorgang oder zur genauen Position der markierten Hebepunkte für die **SMB S03** enthalten.\n\nFolgende relevante Informationen liegen jedoch vor:\n\n*   **Maschinengewicht:** Die SMB S03 wiegt ca. **300 kg** [CITE: SMB / d00678a.pdf / Seite 6].\n*   **Dokumentationshinweis:** Das Inhaltsverzeichnis der Montageanleitung (d01210a.pdf) führt das Kapitel „**Aufstellen**“ auf **Seite 3** auf [CITE: SMB / d01210a.pdf / Seite 1]. Diese spezifische Seite ist jedoch nicht Teil der bereitgestellten Beweismittel.\n\nDie weiteren vorliegenden Seiten (Seite 21 von d00678a.pdf und Seite 9 von S03016.PDF) behandeln ausschließlich die Störungsbeseitigung bzw. elektrische Gerätelisten und enthalten keine Informationen zum physischen Transport oder zu Hebepunkten.",
+      "latency_s": 13.8,
+      "words": 107,
+      "cited_refs": 0,
+      "sentences": 12
+    }
+  },
+  {
+    "id": "cross-schemas",
+    "scope": null,
+    "query": "Welche Maschinen haben Schaltpläne oder elektrische Schemata dokumentiert?",
+    "hits": [
+      {
+        "idx": 1,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "IS3027.PDF",
+        "page": 22,
+        "name": null,
+        "score": 0.709
+      },
+      {
+        "idx": 2,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "320A011408001_CE_deutsch.pdf",
+        "page": 1,
+        "name": null,
+        "score": 0.696
+      },
+      {
+        "idx": 3,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "600A021408001_EE_deutsch.pdf",
+        "page": 1,
+        "name": null,
+        "score": 0.689
+      },
+      {
+        "idx": 4,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "330A011408001_CE_deutsch.pdf",
+        "page": 1,
+        "name": null,
+        "score": 0.669
+      },
+      {
+        "idx": 5,
+        "label": "ImageAsset",
+        "machine": "Adressiersystem   GUI NetJet 1   CAG-161.1204.007.00",
+        "doc": "purge.bmp",
+        "page": null,
+        "name": "purge.bmp",
+        "score": 0.421
+      },
+      {
+        "idx": 6,
+        "label": "ConfigFile",
+        "machine": "Folieneinschlag- und Adressieranlage   CMC 2800   Nr 4282",
+        "doc": "BEORDA-J-ETIC.JOB.txt",
+        "page": null,
+        "name": "BEORDA-J-ETIC.JOB.txt",
+        "score": 0.376
+      }
+    ],
+    "text_only": {
+      "answer": "Basierend auf den vorliegenden Dokumenten sind für folgende Maschinen Schaltpläne dokumentiert:\n\n*   **SMB INO (Umreifungsmaschine):** Für die Seriennummer 320A011408001 ist der Schaltplan **IS3027** dokumentiert [CITE: SMB / 320A011408001_CE_deutsch.pdf / page 1]. Ergänzend liegt eine Geräteliste (IS3.027-99) vor, die elektrische Komponenten wie das Touchpanel (x43110), Ultraschallsensoren (B70: fr1889), induktive Näherungsschalter (z. B. B61: x37272) und diverse Sicherungen (z. B. F1/F2: cb6806) auflistet [CITE: SMB / IS3027.PDF / page 22].\n*   **SMB S02 (Stautaktband):** Für die Seriennummer 600A021408001 ist der Schaltplan **S03016** dokumentiert [CITE: SMB / 600A021408001_EE_deutsch.pdf / page 1].\n*   **SMB PRO (Umreifungsmaschine):** Für die Seriennummer 330A011408001 ist der Schaltplan **CS3037** dokumentiert [CITE: SMB / 330A011408001_CE_deutsch.pdf / page 1].",
+      "latency_s": 6.2,
+      "words": 108,
+      "cited_refs": 0,
+      "sentences": 11
+    },
+    "multimodal": {
+      "answer": "Basierend auf den vorliegenden Dokumenten sind für folgende Maschinen spezifische Schaltpläne dokumentiert:\n\n*   **SMB INO (Umreifungsmaschine):** Für die Maschine mit der Seriennummer 320A011408001 ist der Schaltplan **IS3027** dokumentiert [CITE: SMB / 320A011408001_CE_deutsch.pdf / page 1]. Ergänzend dazu existiert eine Geräteliste (Seite 1/3) für diesen Schaltplan (IS3.027-99), die unter anderem Sensoren (z. B. Ultraschallsensor UB1000, Pos. B70, Best.-Nr. fr1889) und Sicherungen auflistet [CITE: SMB / IS3027.PDF / page 22].\n*   **SMB S02 (Stautaktband):** Für die unvollständige Maschine mit der Seriennummer 600A021408001 ist der Schaltplan **S03016** hinterlegt [CITE: SMB / 600A021408001_EE_deutsch.pdf / page 1].\n*   **SMB PRO (Umreifungsmaschine):** Für die Maschine mit der Seriennummer 330A011408001 ist der Schaltplan **CS3037** dokumentiert [CITE: SMB / 330A011408001_CE_deutsch.pdf / page 1].",
+      "latency_s": 8.7,
+      "words": 115,
+      "cited_refs": 0,
+      "sentences": 12
+    }
+  },
+  {
+    "id": "smb-24m-maintenance",
+    "scope": "smb",
+    "query": "Welche Baugruppen gehören zur 2.4 Millionen Wartungsstufe und welche Teile werden getauscht?",
+    "hits": [
+      {
+        "idx": 1,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "600A021408001_WP.pdf",
+        "page": 9,
+        "name": null,
+        "score": 0.748
+      },
+      {
+        "idx": 2,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "600A021408001_WP.pdf",
+        "page": 3,
+        "name": null,
+        "score": 0.741
+      },
+      {
+        "idx": 3,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "d00678a.pdf",
+        "page": 21,
+        "name": null,
+        "score": 0.733
+      },
+      {
+        "idx": 4,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "600A021408001_WP.pdf",
+        "page": 5,
+        "name": null,
+        "score": 0.665
+      },
+      {
+        "idx": 5,
+        "label": "ManualSection",
+        "machine": "SMB",
+        "doc": "d00678a.pdf",
+        "page": 5,
+        "name": null,
+        "score": 0.662
+      },
+      {
+        "idx": 6,
+        "label": "ImageAsset",
+        "machine": "SMB",
+        "doc": "SMB.gif",
+        "page": null,
+        "name": "SMB.gif",
+        "score": 0.414
+      }
+    ],
+    "text_only": {
+      "answer": " / page 9]. Correct.\n\n    *   *One more thing:* The question asks \"welche Teile werden getauscht\". In the context of a maintenance manual index, the items listed under a cycle count are the items to be replaced/serviced.\n\n    *   *Final Answer Construction:*\n        Für das **Stautaktband SMB S.02 (60",
+      "latency_s": 10.3,
+      "words": 46,
+      "cited_refs": 0,
+      "sentences": 4
+    },
+    "multimodal": {
+      "answer": "Für das **Stautaktband SMB S.02 - 2 Staustationen (Modell-Nr. 600A021408001)** sind in der Wartungsstufe **2.4 Millionen Umreifungen** (2.4 million cycles) laut Inhaltsverzeichnis folgende Baugruppen und Teile für den Austausch bzw. die Wartung vorgesehen:\n\n*   **Umlenkrolle kpl.** (Idler roll compl.) [CITE: SMB / 600A021408001_WP.pdf / page 9]\n*   **Umlenkrolle** (Deflection roll compl.) [CITE: SMB / 600A021408001_WP.pdf / page 9]\n*   **Spannrolle kpl. schmale Riemenspur** (Belt pulley) [CITE: SMB / 600A021408001_WP.pdf / page 9]\n\n**Wichtige Hinweise für den Techniker:**\n*   Es dürfen ausschließlich **Original-Ersatzteile** des Herstellers verwendet werden, da andernfalls die Produkthaftung erlischt [CITE: SMB / 600A021408001_WP.pdf / page 5].\n*   Vor Beginn der Arbeiten muss die Maschine vom Stromnetz getrennt oder der **Hauptschalter auf „OFF“** gestellt und mit einem Schloss gegen Wiedereinschalten gesichert werden [CITE: SMB / d00",
+      "latency_s": 13.7,
+      "words": 127,
+      "cited_refs": 0,
+      "sentences": 15
+    }
+  }
+]

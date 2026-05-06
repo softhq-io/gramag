@@ -1,0 +1,461 @@
+{
+  "created_at_utc": "2026-04-22T16:05:47.936845+00:00",
+  "source": "new_erp_graphql_subset_demo",
+  "api_limits_notice": {
+    "daily_free_calls": 500,
+    "rate_limit_per_user_per_second": 2,
+    "throttle_ms_used": 700
+  },
+  "selection": {
+    "machine_ids_requested": [
+      "73",
+      "1286",
+      "653"
+    ],
+    "machine_ids_used": [
+      "73",
+      "1286",
+      "653"
+    ],
+    "docs_per_machine": 2,
+    "scan_pages": 4,
+    "page_size": 200
+  },
+  "summary": {
+    "machines_in_subset": 3,
+    "recent_service_docs_scanned": 800,
+    "api_calls_used": 20,
+    "max_calls_limit": 120
+  },
+  "machines": [
+    {
+      "machine_id": "73",
+      "exists_in_current_system": true,
+      "machine": {
+        "id": "73",
+        "titel": "Wendestation   TS   401941",
+        "seriennummer": "10 90 20 23 06 01",
+        "nummer": null,
+        "createDate": "2024-03-19 13:26:05",
+        "editDate": "2026-02-18 10:05:18",
+        "refKunde": {
+          "id": "193",
+          "nummer": "60192"
+        }
+      },
+      "service_documents": [
+        {
+          "service_document": {
+            "id": "14902",
+            "nummer": "1004425",
+            "bezeichnung": "Wendestation: Hubtisch kommt nach Haube auf nicht mehr hoch!?",
+            "dokDatum": "2026-04-22",
+            "createDate": "2026-04-22 09:10:00",
+            "editDate": "2026-04-22 16:40:43",
+            "refProdukt": {
+              "id": "73",
+              "titel": "Wendestation   TS   401941",
+              "seriennummer": "10 90 20 23 06 01"
+            },
+            "refKunde": {
+              "id": "193",
+              "nummer": "60192"
+            }
+          },
+          "comments": [],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "13275",
+            "nummer": "1003908",
+            "bezeichnung": "Nachrüstsatz für die Wendestationen",
+            "dokDatum": "2026-01-21",
+            "createDate": "2026-01-21 14:12:50",
+            "editDate": "2026-04-22 08:39:12",
+            "refProdukt": {
+              "id": "73",
+              "titel": "Wendestation   TS   401941",
+              "seriennummer": "10 90 20 23 06 01"
+            },
+            "refKunde": {
+              "id": "193",
+              "nummer": "60192"
+            }
+          },
+          "comments": [
+            {
+              "id": "11811",
+              "datum": "2026-04-22 07:34:24",
+              "kommentar": "<p>fertig, an MBO verrechnen</p><p>Reisezeit in Serviceauftrag (1004281)</p>",
+              "refUser": 7
+            },
+            {
+              "id": "11506",
+              "datum": "2026-04-07 13:40:08",
+              "kommentar": "<strong>Material bei Benjamin K. im Büro.</strong>",
+              "refUser": 16
+            },
+            {
+              "id": "11303",
+              "datum": "2026-03-24 09:57:45",
+              "kommentar": "<p>Dieser Einsatz an MBO verrechnen.</p>Elektrischer Umbau ca 3 Std Aufwand.",
+              "refUser": 4
+            },
+            {
+              "id": "11131",
+              "datum": "2026-03-13 18:33:33",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"22\">Olaf Haug</span> <br>Ich geb dir mal den Nachrüstsatz falls es jemand anders während meinen Ferien macht.",
+              "refUser": 7
+            },
+            {
+              "id": "10790",
+              "datum": "2026-02-18 16:10:12",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"7\">Ulrich Schneider</span> Hoi Uli. Nach deinem Test heute sollten wir die E-Teile einbauen. Bitte ab jetzt übernehmen und nach deinem Urlaub einen Termin beim Kunden machen. Die Teile liegen bei uns und in den Dateien liegt der neue Schaltplan. <br><br>Wir werden den Einsatz an MBO berechnen.",
+              "refUser": 22
+            },
+            {
+              "id": "10789",
+              "datum": "2026-02-18 15:59:20",
+              "kommentar": "<p>Uli hat es heute geprüft. Maschine schaltet nicht ab. </p>",
+              "refUser": 22
+            },
+            {
+              "id": "10611",
+              "datum": "2026-02-09 15:16:11",
+              "kommentar": "<p>Anscheinend stoppen die Vorgängeraggregate nicht, wenn am TS die Haube geöffnet wird. Vor Ort überprüfen, ob dies auch hinter einer Koppelbox so ist.</p>",
+              "refUser": 22
+            },
+            {
+              "id": "10407",
+              "datum": "2026-01-30 13:53:32",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"10\">Nuria Gilli</span> habe eben nochmals mit MBO telefoniert. Ich muss den Sachverhalt direkt bei Galledia prüfen, ob das notwendig ist.",
+              "refUser": 22
+            },
+            {
+              "id": "10306",
+              "datum": "2026-01-23 10:17:03",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"10\">Nuria Gilli</span> Hallo Nuria. Ich habe mir das hier nochmals angeschaut. Da stimmt was nicht. Lass uns Montag mal nochmals drüber schauen. Gruss Olaf<br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"20\">Service Gramag</span> bitte noch nichts einplanen",
+              "refUser": 22
+            },
+            {
+              "id": "10268",
+              "datum": "2026-01-21 14:35:15",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"20\">Service Gramag</span> bitte Einsatz zum Umrüsten planen. ",
+              "refUser": 10
+            }
+          ],
+          "parts": [
+            {
+              "id": "118194",
+              "anzahl": 1,
+              "preis": 0,
+              "nummer": null,
+              "titel": "Wendestation Nachrüstsatz",
+              "refArt": {
+                "id": null,
+                "nummer": null,
+                "lang1titel": null,
+                "herstellernr": null
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "machine_id": "1286",
+      "exists_in_current_system": true,
+      "machine": {
+        "id": "1286",
+        "titel": "CoBo-Stack  Nr 10 82 96 23 03 02",
+        "seriennummer": "10 82 96 23 03 02",
+        "nummer": null,
+        "createDate": "2025-11-28 12:00:49",
+        "editDate": "2026-01-05 08:44:13",
+        "refKunde": {
+          "id": "193",
+          "nummer": "60192"
+        }
+      },
+      "service_documents": [
+        {
+          "service_document": {
+            "id": "14923",
+            "nummer": "1004433",
+            "bezeichnung": "MBO CoBo Stack: Software Update",
+            "dokDatum": "2026-04-22",
+            "createDate": "2026-04-22 14:49:23",
+            "editDate": "2026-04-22 16:38:27",
+            "refProdukt": {
+              "id": "1286",
+              "titel": "CoBo-Stack  Nr 10 82 96 23 03 02",
+              "seriennummer": "10 82 96 23 03 02"
+            },
+            "refKunde": {
+              "id": "193",
+              "nummer": "60192"
+            }
+          },
+          "comments": [],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "14393",
+            "nummer": "1004260",
+            "bezeichnung": "Cobo: Antrieb der Einlauftransportrollen überprüfen",
+            "dokDatum": "2026-03-24",
+            "createDate": "2026-03-24 09:59:39",
+            "editDate": "2026-04-22 08:47:23",
+            "refProdukt": {
+              "id": "1286",
+              "titel": "CoBo-Stack  Nr 10 82 96 23 03 02",
+              "seriennummer": "10 82 96 23 03 02"
+            },
+            "refKunde": {
+              "id": "193",
+              "nummer": "60192"
+            }
+          },
+          "comments": [
+            {
+              "id": "11812",
+              "datum": "2026-04-22 07:35:09",
+              "kommentar": "<p>fertig, verrechnen</p><p>Reisezeit in Serviceauftrag (1004281)</p>",
+              "refUser": 7
+            },
+            {
+              "id": "11422",
+              "datum": "2026-03-30 15:51:19",
+              "kommentar": "<p>Motor wird gewechselt und anschliessend der defekte versucht zu reparieren.<br>Anschliessend legt er ihn sich ans Lager, ist an mehreren Stellen der versch. CoBo's verbaut.</p>",
+              "refUser": 16
+            },
+            {
+              "id": "11421",
+              "datum": "2026-03-30 15:49:03",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> <br>Hello<br><br>Bitte den Motor gemäss Angebot (unter Dateien) anlegen und bestellen und rüsten.<br><br>Danke",
+              "refUser": 16
+            }
+          ],
+          "parts": [
+            {
+              "id": "129377",
+              "anzahl": 1,
+              "preis": 841.2,
+              "nummer": "24092",
+              "titel": "Motor",
+              "refArt": {
+                "id": "14098",
+                "nummer": "24092",
+                "lang1titel": "Motor",
+                "herstellernr": "840.6400.0066"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "machine_id": "653",
+      "exists_in_current_system": true,
+      "machine": {
+        "id": "653",
+        "titel": "Foliermaschine   Pratica   401343",
+        "seriennummer": "3368",
+        "nummer": null,
+        "createDate": "2024-04-23 14:22:39",
+        "editDate": "2024-04-23 14:27:02",
+        "refKunde": {
+          "id": "220",
+          "nummer": "60219"
+        }
+      },
+      "service_documents": [
+        {
+          "service_document": {
+            "id": "13787",
+            "nummer": "1003981",
+            "bezeichnung": "Service an CMC Pratica",
+            "dokDatum": "2026-02-17",
+            "createDate": "2026-02-17 15:32:16",
+            "editDate": "2026-04-22 15:27:09",
+            "refProdukt": {
+              "id": "653",
+              "titel": "Foliermaschine   Pratica   401343",
+              "seriennummer": "3368"
+            },
+            "refKunde": {
+              "id": "220",
+              "nummer": "60219"
+            }
+          },
+          "comments": [
+            {
+              "id": "11841",
+              "datum": "2026-04-22 15:27:08",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"15\">Daniel Baumann</span> <br>Ersatzrollen sollten bis KW21 geliefert werden.<br>Gruss Beni",
+              "refUser": 8
+            },
+            {
+              "id": "11562",
+              "datum": "2026-04-10 07:08:47",
+              "kommentar": "<p>in Abklärung mit CMC durch Beni</p>",
+              "refUser": 15
+            },
+            {
+              "id": "11473",
+              "datum": "2026-04-02 10:15:50",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"15\">Daniel Baumann</span> Bitte heute Nachmittag Herrn Klaiber zurückrufen, er hat noch Fragen zur Reparatur. Danke und Gruss. ",
+              "refUser": 10
+            },
+            {
+              "id": "11457",
+              "datum": "2026-04-01 11:54:16",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> Die Gasdruckfedern sind von der Grösse her identisch wie die alten, haben aber 1200 statt 200 Newton.<br id=\"isPasted\">Die richtigen sollen nachbestellt und bei Gelegenheit montiert werden (ca. 15 Minuten Arbeit).<br>Die gelieferten Gasdruckfedern werden zurückgebracht.<br><br>Für die Bestellung wird ein neuer SA eröffnet.",
+              "refUser": 15
+            },
+            {
+              "id": "10910",
+              "datum": "2026-02-27 08:22:28",
+              "kommentar": "<p>Polytechna Ware ist bereit gemäss Herr Kamenovich, mit ihm vereinbart das wir uns wieder melden. Wir warten noch auf die Ware von CMC. Dann mit Herrn Kamenovich einen Termin vereinbaren (Telefon 079 605 53 59). <br id=\"isPasted\"><br><br></p>",
+              "refUser": 6
+            },
+            {
+              "id": "10872",
+              "datum": "2026-02-25 08:21:15",
+              "kommentar": "<p>Teilrechnung für Servicecheck erstellt!</p>",
+              "refUser": 6
+            },
+            {
+              "id": "10867",
+              "datum": "2026-02-25 06:28:35",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> <br>Warum sind die Teile im Lieferschein?<br><br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"18\">Denis Braun</span> <br>3.5Std Fahrzeit von Basel nach Schaffhausen? ",
+              "refUser": 4
+            },
+            {
+              "id": "10810",
+              "datum": "2026-02-19 13:07:58",
+              "kommentar": "<p>,<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> <br>Beni Bitte das grosse Transportband wie bei der Pratica von Jordi AG bei Firma Polytecna bestellen und Techniker Termin so Planen, wenn auch die anderen Teile bereit sind für Einbau.Können wir alles zusammen machen.<br>2MZ2421 Belt  1Stück<br><br>1102577 Cilindro  2Stück<br>2MB3649 Rubber Roller  4Stück<br><br>Danke</p>",
+              "refUser": 18
+            },
+            {
+              "id": "10762",
+              "datum": "2026-02-17 15:34:18",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"18\">Denis Braun</span> <br>Let' s Rock",
+              "refUser": 4
+            }
+          ],
+          "parts": [
+            {
+              "id": "123236",
+              "anzahl": 1,
+              "preis": 1246.2,
+              "nummer": "14704",
+              "titel": "Band 240 x 6080 HAT-5E",
+              "refArt": {
+                "id": "4706",
+                "nummer": "14704",
+                "lang1titel": "Band 240 x 6080 HAT-5E",
+                "herstellernr": "2MZ2421"
+              }
+            },
+            {
+              "id": "123237",
+              "anzahl": 4,
+              "preis": 204.05,
+              "nummer": "19971",
+              "titel": "Rolle D59x50-D25",
+              "refArt": {
+                "id": "9973",
+                "nummer": "19971",
+                "lang1titel": "Rolle D59x50-D25",
+                "herstellernr": "2MB3649"
+              }
+            },
+            {
+              "id": "123238",
+              "anzahl": 0,
+              "preis": 167.15,
+              "nummer": "24046",
+              "titel": "Zylinder",
+              "refArt": {
+                "id": "14052",
+                "nummer": "24046",
+                "lang1titel": "Zylinder",
+                "herstellernr": "1102577 / 1118107"
+              }
+            },
+            {
+              "id": "127500",
+              "anzahl": 8,
+              "preis": 130,
+              "nummer": "10009",
+              "titel": "Technikeraufwand Polytechna nach Aufwand",
+              "refArt": {
+                "id": "12554",
+                "nummer": "10009",
+                "lang1titel": "Dummy Material Kundendienst",
+                "herstellernr": null
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "14593",
+            "nummer": "1004323",
+            "bezeichnung": "Gasdruckfedern am Deckel im Schweissbereich ersetzen",
+            "dokDatum": "2026-04-01",
+            "createDate": "2026-04-01 11:56:36",
+            "editDate": "2026-04-16 15:11:17",
+            "refProdukt": {
+              "id": "653",
+              "titel": "Foliermaschine   Pratica   401343",
+              "seriennummer": "3368"
+            },
+            "refKunde": {
+              "id": "220",
+              "nummer": "60219"
+            }
+          },
+          "comments": [
+            {
+              "id": "11462",
+              "datum": "2026-04-01 16:12:25",
+              "kommentar": "<p>Korrektur, nicht Artikel Nr. 24046, neu angefragt für korrekten Artikel </p>",
+              "refUser": 10
+            },
+            {
+              "id": "11459",
+              "datum": "2026-04-01 12:00:16",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span>  Bitte das Teil 24046 organisieren. Siehe SA 1003981",
+              "refUser": 15
+            },
+            {
+              "id": "11458",
+              "datum": "2026-04-01 11:59:01",
+              "kommentar": "<p>Komentar von SA 1003981: Die Gasdruckfedern sind von der Grösse her identisch wie die alten, haben aber 1200 statt 200 Newton.<br id=\"isPasted\">Die richtigen sollen nachbestellt und bei Gelegenheit montiert werden (ca. 15 Minuten Arbeit).<br>Die gelieferten Gasdruckfedern werden zurückgebracht.</p>",
+              "refUser": 15
+            }
+          ],
+          "parts": [
+            {
+              "id": "130012",
+              "anzahl": 2,
+              "preis": 36.9,
+              "nummer": "24097",
+              "titel": "Gasdruckfeder",
+              "refArt": {
+                "id": "14103",
+                "nummer": "24097",
+                "lang1titel": "Gasdruckfeder",
+                "herstellernr": "1111930"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+# Dev artifacts
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Frontend dev (we rebuild in Dockerfile)
+web/node_modules/
+web/dist/
+
+# Don't bundle data inside the image — goes on Fly volume
+data/
+index/
+proto/cache/pages/
+drive-download-*/
+
+# Screenshots / presentations
+screenshots/
+*.zip
+*.png
+*.html
+presentation*
+
+# Big bench artifacts
+proto/cache/bench_pages/
+proto/cache/*.json
+proto/cache/*.md
+proto/cache/*.log
+proto/cache/ingest_checkpoint.json
+
+# Main-app seeds (not used in proto-only)
+seed_pdfs_checkpoint.json
+poc_output/
+
+# Git / IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store

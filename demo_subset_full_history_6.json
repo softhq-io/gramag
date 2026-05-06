@@ -1,0 +1,1758 @@
+{
+  "created_at_utc": "2026-04-22T17:42:59.498316+00:00",
+  "source": "new_erp_graphql_subset_demo",
+  "api_limits_notice": {
+    "daily_free_calls": 500,
+    "rate_limit_per_user_per_second": 2,
+    "throttle_ms_used": 700
+  },
+  "selection": {
+    "machine_ids_requested": [
+      "73",
+      "1286",
+      "653",
+      "1109",
+      "1144",
+      "157"
+    ],
+    "machine_ids_used": [
+      "73",
+      "1286",
+      "653",
+      "1109",
+      "1144",
+      "157"
+    ],
+    "docs_per_machine": 999,
+    "scan_pages": 3,
+    "page_size": 1000
+  },
+  "summary": {
+    "machines_in_subset": 6,
+    "recent_service_docs_scanned": 1850,
+    "api_calls_used": 61,
+    "max_calls_limit": 350
+  },
+  "machines": [
+    {
+      "machine_id": "73",
+      "exists_in_current_system": true,
+      "machine": {
+        "id": "73",
+        "titel": "Wendestation   TS   401941",
+        "seriennummer": "10 90 20 23 06 01",
+        "nummer": null,
+        "createDate": "2024-03-19 13:26:05",
+        "editDate": "2026-02-18 10:05:18",
+        "refKunde": {
+          "id": "193",
+          "nummer": "60192"
+        }
+      },
+      "service_documents": [
+        {
+          "service_document": {
+            "id": "14902",
+            "nummer": "1004425",
+            "bezeichnung": "Wendestation: Hubtisch kommt nach Haube auf nicht mehr hoch!?",
+            "dokDatum": "2026-04-22",
+            "createDate": "2026-04-22 09:10:00",
+            "editDate": "2026-04-22 16:40:43",
+            "refProdukt": {
+              "id": "73",
+              "titel": "Wendestation   TS   401941",
+              "seriennummer": "10 90 20 23 06 01"
+            },
+            "refKunde": {
+              "id": "193",
+              "nummer": "60192"
+            }
+          },
+          "comments": [],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "13275",
+            "nummer": "1003908",
+            "bezeichnung": "Nachrüstsatz für die Wendestationen",
+            "dokDatum": "2026-01-21",
+            "createDate": "2026-01-21 14:12:50",
+            "editDate": "2026-04-22 08:39:12",
+            "refProdukt": {
+              "id": "73",
+              "titel": "Wendestation   TS   401941",
+              "seriennummer": "10 90 20 23 06 01"
+            },
+            "refKunde": {
+              "id": "193",
+              "nummer": "60192"
+            }
+          },
+          "comments": [
+            {
+              "id": "11811",
+              "datum": "2026-04-22 07:34:24",
+              "kommentar": "<p>fertig, an MBO verrechnen</p><p>Reisezeit in Serviceauftrag (1004281)</p>",
+              "refUser": 7
+            },
+            {
+              "id": "11506",
+              "datum": "2026-04-07 13:40:08",
+              "kommentar": "<strong>Material bei Benjamin K. im Büro.</strong>",
+              "refUser": 16
+            },
+            {
+              "id": "11303",
+              "datum": "2026-03-24 09:57:45",
+              "kommentar": "<p>Dieser Einsatz an MBO verrechnen.</p>Elektrischer Umbau ca 3 Std Aufwand.",
+              "refUser": 4
+            },
+            {
+              "id": "11131",
+              "datum": "2026-03-13 18:33:33",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"22\">Olaf Haug</span> <br>Ich geb dir mal den Nachrüstsatz falls es jemand anders während meinen Ferien macht.",
+              "refUser": 7
+            },
+            {
+              "id": "10790",
+              "datum": "2026-02-18 16:10:12",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"7\">Ulrich Schneider</span> Hoi Uli. Nach deinem Test heute sollten wir die E-Teile einbauen. Bitte ab jetzt übernehmen und nach deinem Urlaub einen Termin beim Kunden machen. Die Teile liegen bei uns und in den Dateien liegt der neue Schaltplan. <br><br>Wir werden den Einsatz an MBO berechnen.",
+              "refUser": 22
+            },
+            {
+              "id": "10789",
+              "datum": "2026-02-18 15:59:20",
+              "kommentar": "<p>Uli hat es heute geprüft. Maschine schaltet nicht ab. </p>",
+              "refUser": 22
+            },
+            {
+              "id": "10611",
+              "datum": "2026-02-09 15:16:11",
+              "kommentar": "<p>Anscheinend stoppen die Vorgängeraggregate nicht, wenn am TS die Haube geöffnet wird. Vor Ort überprüfen, ob dies auch hinter einer Koppelbox so ist.</p>",
+              "refUser": 22
+            },
+            {
+              "id": "10407",
+              "datum": "2026-01-30 13:53:32",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"10\">Nuria Gilli</span> habe eben nochmals mit MBO telefoniert. Ich muss den Sachverhalt direkt bei Galledia prüfen, ob das notwendig ist.",
+              "refUser": 22
+            },
+            {
+              "id": "10306",
+              "datum": "2026-01-23 10:17:03",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"10\">Nuria Gilli</span> Hallo Nuria. Ich habe mir das hier nochmals angeschaut. Da stimmt was nicht. Lass uns Montag mal nochmals drüber schauen. Gruss Olaf<br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"20\">Service Gramag</span> bitte noch nichts einplanen",
+              "refUser": 22
+            },
+            {
+              "id": "10268",
+              "datum": "2026-01-21 14:35:15",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"20\">Service Gramag</span> bitte Einsatz zum Umrüsten planen. ",
+              "refUser": 10
+            }
+          ],
+          "parts": [
+            {
+              "id": "118194",
+              "anzahl": 1,
+              "preis": 0,
+              "nummer": null,
+              "titel": "Wendestation Nachrüstsatz",
+              "refArt": {
+                "id": null,
+                "nummer": null,
+                "lang1titel": null,
+                "herstellernr": null
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "6916",
+            "nummer": "1002049",
+            "bezeichnung": "Wendestation KST7329: Transportrolle ersetzen (Material vor Ort)",
+            "dokDatum": "2025-02-24",
+            "createDate": "2025-02-24 13:32:01",
+            "editDate": "2025-02-28 06:11:42",
+            "refProdukt": {
+              "id": "73",
+              "titel": "Wendestation   TS   401941",
+              "seriennummer": "10 90 20 23 06 01"
+            },
+            "refKunde": {
+              "id": "193",
+              "nummer": "60192"
+            }
+          },
+          "comments": [],
+          "parts": []
+        }
+      ]
+    },
+    {
+      "machine_id": "1286",
+      "exists_in_current_system": true,
+      "machine": {
+        "id": "1286",
+        "titel": "CoBo-Stack  Nr 10 82 96 23 03 02",
+        "seriennummer": "10 82 96 23 03 02",
+        "nummer": null,
+        "createDate": "2025-11-28 12:00:49",
+        "editDate": "2026-01-05 08:44:13",
+        "refKunde": {
+          "id": "193",
+          "nummer": "60192"
+        }
+      },
+      "service_documents": [
+        {
+          "service_document": {
+            "id": "14923",
+            "nummer": "1004433",
+            "bezeichnung": "MBO CoBo Stack: Software Update",
+            "dokDatum": "2026-04-22",
+            "createDate": "2026-04-22 14:49:23",
+            "editDate": "2026-04-22 16:38:27",
+            "refProdukt": {
+              "id": "1286",
+              "titel": "CoBo-Stack  Nr 10 82 96 23 03 02",
+              "seriennummer": "10 82 96 23 03 02"
+            },
+            "refKunde": {
+              "id": "193",
+              "nummer": "60192"
+            }
+          },
+          "comments": [],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "14393",
+            "nummer": "1004260",
+            "bezeichnung": "Cobo: Antrieb der Einlauftransportrollen überprüfen",
+            "dokDatum": "2026-03-24",
+            "createDate": "2026-03-24 09:59:39",
+            "editDate": "2026-04-22 08:47:23",
+            "refProdukt": {
+              "id": "1286",
+              "titel": "CoBo-Stack  Nr 10 82 96 23 03 02",
+              "seriennummer": "10 82 96 23 03 02"
+            },
+            "refKunde": {
+              "id": "193",
+              "nummer": "60192"
+            }
+          },
+          "comments": [
+            {
+              "id": "11812",
+              "datum": "2026-04-22 07:35:09",
+              "kommentar": "<p>fertig, verrechnen</p><p>Reisezeit in Serviceauftrag (1004281)</p>",
+              "refUser": 7
+            },
+            {
+              "id": "11422",
+              "datum": "2026-03-30 15:51:19",
+              "kommentar": "<p>Motor wird gewechselt und anschliessend der defekte versucht zu reparieren.<br>Anschliessend legt er ihn sich ans Lager, ist an mehreren Stellen der versch. CoBo's verbaut.</p>",
+              "refUser": 16
+            },
+            {
+              "id": "11421",
+              "datum": "2026-03-30 15:49:03",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> <br>Hello<br><br>Bitte den Motor gemäss Angebot (unter Dateien) anlegen und bestellen und rüsten.<br><br>Danke",
+              "refUser": 16
+            }
+          ],
+          "parts": [
+            {
+              "id": "129377",
+              "anzahl": 1,
+              "preis": 841.2,
+              "nummer": "24092",
+              "titel": "Motor",
+              "refArt": {
+                "id": "14098",
+                "nummer": "24092",
+                "lang1titel": "Motor",
+                "herstellernr": "840.6400.0066"
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "11617",
+            "nummer": "1003448",
+            "bezeichnung": "Cobo Stack 10 8296 23 03 02",
+            "dokDatum": "2025-10-21",
+            "createDate": "2025-10-21 15:39:15",
+            "editDate": "2026-03-05 12:56:47",
+            "refProdukt": {
+              "id": "1286",
+              "titel": "CoBo-Stack  Nr 10 82 96 23 03 02",
+              "seriennummer": "10 82 96 23 03 02"
+            },
+            "refKunde": {
+              "id": "193",
+              "nummer": "60192"
+            }
+          },
+          "comments": [
+            {
+              "id": "10938",
+              "datum": "2026-03-02 07:17:37",
+              "kommentar": "<p>Agiert mit Serviceauftrag (1003826) zusammen. Ist für uns erledigt, wir haben gemacht was wir können, der Router funktioniert. Wenn's immer noch nicht geht, liegt's am Netzwerk von Galledia.</p>",
+              "refUser": 7
+            },
+            {
+              "id": "10004",
+              "datum": "2026-01-05 15:03:44",
+              "kommentar": "<p>KST 7329</p>",
+              "refUser": 7
+            },
+            {
+              "id": "10000",
+              "datum": "2026-01-05 13:33:14",
+              "kommentar": "<p>Reisezeiten in Serviceauftrag (1003814)</p>",
+              "refUser": 7
+            },
+            {
+              "id": "9580",
+              "datum": "2025-12-02 11:02:14",
+              "kommentar": "<p>Tel. S. Sommer  USC:<br id=\"isPasted\"></p><ul><li>Router bekommen vom DHCP eine IP Adresse</li><li>Beide CoBo brauchen einen offenen UDP Port 1194 von innen nach aussen.</li></ul><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"16\">Christian Kunze</span> <br><br>die IP 10.18.187.x ist die virtuelle IP für den VPN, die hat nix mit der IP des Routers im Kundennetzwerk zu tun. Der Router bekommt im Kundennetzwerk eine IP vom DHCP Server.",
+              "refUser": 7
+            },
+            {
+              "id": "9579",
+              "datum": "2025-12-02 11:01:13",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"7\">Ulrich Schneider</span> ..",
+              "refUser": 15
+            },
+            {
+              "id": "8994",
+              "datum": "2025-10-29 13:55:51",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"15\">Daniel Baumann</span> <br>Wie mit Uli besprochen. Auftrag zurück zu dir. Bei Fragen bitte an Uli wenden",
+              "refUser": 4
+            },
+            {
+              "id": "8952",
+              "datum": "2025-10-27 15:24:48",
+              "kommentar": "<p>Das habe ich Uli vor meine Ferien weitergegeben. Er sollte nach ein paar Tagen dort seit mit ein Greifer und denn die VPN Verbindung für MBO anschauen und ein SA für Ihm erstellen. Vor die Reparatur soll MBO die Log Files anschauen wann die Fehler da ist, Galledia konnte die Verbindung nicht schafen. Ich habe vor meine Ferien noch mit Ben Telefoniert, er sollte noch an Service Gramag mehrere Einsätze komunizieren, weil er wollte die Termine kombinieren, er wusste damals aber noch nicht alles. <br>Uli war dort aber hat den Cobo vergessen. Ich schaue nach.</p>",
+              "refUser": 15
+            },
+            {
+              "id": "8850",
+              "datum": "2025-10-21 15:40:19",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"15\">Daniel Baumann</span> <br>Siehe Mail von Ben<br>Wie geht es hier weiter? <br>Ben hat nichts mehr gehört von uns, im System habe ich nichts gesehen. ",
+              "refUser": 4
+            }
+          ],
+          "parts": []
+        }
+      ]
+    },
+    {
+      "machine_id": "653",
+      "exists_in_current_system": true,
+      "machine": {
+        "id": "653",
+        "titel": "Foliermaschine   Pratica   401343",
+        "seriennummer": "3368",
+        "nummer": null,
+        "createDate": "2024-04-23 14:22:39",
+        "editDate": "2024-04-23 14:27:02",
+        "refKunde": {
+          "id": "220",
+          "nummer": "60219"
+        }
+      },
+      "service_documents": [
+        {
+          "service_document": {
+            "id": "13787",
+            "nummer": "1003981",
+            "bezeichnung": "Service an CMC Pratica",
+            "dokDatum": "2026-02-17",
+            "createDate": "2026-02-17 15:32:16",
+            "editDate": "2026-04-22 15:27:09",
+            "refProdukt": {
+              "id": "653",
+              "titel": "Foliermaschine   Pratica   401343",
+              "seriennummer": "3368"
+            },
+            "refKunde": {
+              "id": "220",
+              "nummer": "60219"
+            }
+          },
+          "comments": [
+            {
+              "id": "11841",
+              "datum": "2026-04-22 15:27:08",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"15\">Daniel Baumann</span> <br>Ersatzrollen sollten bis KW21 geliefert werden.<br>Gruss Beni",
+              "refUser": 8
+            },
+            {
+              "id": "11562",
+              "datum": "2026-04-10 07:08:47",
+              "kommentar": "<p>in Abklärung mit CMC durch Beni</p>",
+              "refUser": 15
+            },
+            {
+              "id": "11473",
+              "datum": "2026-04-02 10:15:50",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"15\">Daniel Baumann</span> Bitte heute Nachmittag Herrn Klaiber zurückrufen, er hat noch Fragen zur Reparatur. Danke und Gruss. ",
+              "refUser": 10
+            },
+            {
+              "id": "11457",
+              "datum": "2026-04-01 11:54:16",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> Die Gasdruckfedern sind von der Grösse her identisch wie die alten, haben aber 1200 statt 200 Newton.<br id=\"isPasted\">Die richtigen sollen nachbestellt und bei Gelegenheit montiert werden (ca. 15 Minuten Arbeit).<br>Die gelieferten Gasdruckfedern werden zurückgebracht.<br><br>Für die Bestellung wird ein neuer SA eröffnet.",
+              "refUser": 15
+            },
+            {
+              "id": "10910",
+              "datum": "2026-02-27 08:22:28",
+              "kommentar": "<p>Polytechna Ware ist bereit gemäss Herr Kamenovich, mit ihm vereinbart das wir uns wieder melden. Wir warten noch auf die Ware von CMC. Dann mit Herrn Kamenovich einen Termin vereinbaren (Telefon 079 605 53 59). <br id=\"isPasted\"><br><br></p>",
+              "refUser": 6
+            },
+            {
+              "id": "10872",
+              "datum": "2026-02-25 08:21:15",
+              "kommentar": "<p>Teilrechnung für Servicecheck erstellt!</p>",
+              "refUser": 6
+            },
+            {
+              "id": "10867",
+              "datum": "2026-02-25 06:28:35",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> <br>Warum sind die Teile im Lieferschein?<br><br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"18\">Denis Braun</span> <br>3.5Std Fahrzeit von Basel nach Schaffhausen? ",
+              "refUser": 4
+            },
+            {
+              "id": "10810",
+              "datum": "2026-02-19 13:07:58",
+              "kommentar": "<p>,<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> <br>Beni Bitte das grosse Transportband wie bei der Pratica von Jordi AG bei Firma Polytecna bestellen und Techniker Termin so Planen, wenn auch die anderen Teile bereit sind für Einbau.Können wir alles zusammen machen.<br>2MZ2421 Belt  1Stück<br><br>1102577 Cilindro  2Stück<br>2MB3649 Rubber Roller  4Stück<br><br>Danke</p>",
+              "refUser": 18
+            },
+            {
+              "id": "10762",
+              "datum": "2026-02-17 15:34:18",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"18\">Denis Braun</span> <br>Let' s Rock",
+              "refUser": 4
+            }
+          ],
+          "parts": [
+            {
+              "id": "123236",
+              "anzahl": 1,
+              "preis": 1246.2,
+              "nummer": "14704",
+              "titel": "Band 240 x 6080 HAT-5E",
+              "refArt": {
+                "id": "4706",
+                "nummer": "14704",
+                "lang1titel": "Band 240 x 6080 HAT-5E",
+                "herstellernr": "2MZ2421"
+              }
+            },
+            {
+              "id": "123237",
+              "anzahl": 4,
+              "preis": 204.05,
+              "nummer": "19971",
+              "titel": "Rolle D59x50-D25",
+              "refArt": {
+                "id": "9973",
+                "nummer": "19971",
+                "lang1titel": "Rolle D59x50-D25",
+                "herstellernr": "2MB3649"
+              }
+            },
+            {
+              "id": "123238",
+              "anzahl": 0,
+              "preis": 167.15,
+              "nummer": "24046",
+              "titel": "Zylinder",
+              "refArt": {
+                "id": "14052",
+                "nummer": "24046",
+                "lang1titel": "Zylinder",
+                "herstellernr": "1102577 / 1118107"
+              }
+            },
+            {
+              "id": "127500",
+              "anzahl": 8,
+              "preis": 130,
+              "nummer": "10009",
+              "titel": "Technikeraufwand Polytechna nach Aufwand",
+              "refArt": {
+                "id": "12554",
+                "nummer": "10009",
+                "lang1titel": "Dummy Material Kundendienst",
+                "herstellernr": null
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "14593",
+            "nummer": "1004323",
+            "bezeichnung": "Gasdruckfedern am Deckel im Schweissbereich ersetzen",
+            "dokDatum": "2026-04-01",
+            "createDate": "2026-04-01 11:56:36",
+            "editDate": "2026-04-16 15:11:17",
+            "refProdukt": {
+              "id": "653",
+              "titel": "Foliermaschine   Pratica   401343",
+              "seriennummer": "3368"
+            },
+            "refKunde": {
+              "id": "220",
+              "nummer": "60219"
+            }
+          },
+          "comments": [
+            {
+              "id": "11462",
+              "datum": "2026-04-01 16:12:25",
+              "kommentar": "<p>Korrektur, nicht Artikel Nr. 24046, neu angefragt für korrekten Artikel </p>",
+              "refUser": 10
+            },
+            {
+              "id": "11459",
+              "datum": "2026-04-01 12:00:16",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span>  Bitte das Teil 24046 organisieren. Siehe SA 1003981",
+              "refUser": 15
+            },
+            {
+              "id": "11458",
+              "datum": "2026-04-01 11:59:01",
+              "kommentar": "<p>Komentar von SA 1003981: Die Gasdruckfedern sind von der Grösse her identisch wie die alten, haben aber 1200 statt 200 Newton.<br id=\"isPasted\">Die richtigen sollen nachbestellt und bei Gelegenheit montiert werden (ca. 15 Minuten Arbeit).<br>Die gelieferten Gasdruckfedern werden zurückgebracht.</p>",
+              "refUser": 15
+            }
+          ],
+          "parts": [
+            {
+              "id": "130012",
+              "anzahl": 2,
+              "preis": 36.9,
+              "nummer": "24097",
+              "titel": "Gasdruckfeder",
+              "refArt": {
+                "id": "14103",
+                "nummer": "24097",
+                "lang1titel": "Gasdruckfeder",
+                "herstellernr": "1111930"
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "3347",
+            "nummer": "1000987",
+            "bezeichnung": "CMC Pratica- Nr. 3368: Absenkung Längsschweisser prüfen",
+            "dokDatum": "2024-08-29",
+            "createDate": "2024-08-29 13:55:09",
+            "editDate": "2024-09-10 06:31:13",
+            "refProdukt": {
+              "id": "653",
+              "titel": "Foliermaschine   Pratica   401343",
+              "seriennummer": "3368"
+            },
+            "refKunde": {
+              "id": "220",
+              "nummer": "60219"
+            }
+          },
+          "comments": [],
+          "parts": []
+        }
+      ]
+    },
+    {
+      "machine_id": "1109",
+      "exists_in_current_system": true,
+      "machine": {
+        "id": "1109",
+        "titel": "Falzanlage   T700   401190",
+        "seriennummer": null,
+        "nummer": null,
+        "createDate": "2025-01-16 11:10:54",
+        "editDate": "2025-01-21 09:19:11",
+        "refKunde": {
+          "id": "959",
+          "nummer": "60958"
+        }
+      },
+      "service_documents": [
+        {
+          "service_document": {
+            "id": "14316",
+            "nummer": "1004236",
+            "bezeichnung": "MBO T700-FW1: div. Angebote für zusätzliche Arbeiten",
+            "dokDatum": "2026-03-19",
+            "createDate": "2026-03-19 08:58:06",
+            "editDate": "2026-04-22 15:42:35",
+            "refProdukt": {
+              "id": "1109",
+              "titel": "Falzanlage   T700   401190",
+              "seriennummer": null
+            },
+            "refKunde": {
+              "id": "959",
+              "nummer": "60958"
+            }
+          },
+          "comments": [
+            {
+              "id": "11842",
+              "datum": "2026-04-22 15:31:20",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> <br>Könnt ihr mir diese Teile erfassen in der Offerte? <br>Siehe Datei",
+              "refUser": 4
+            },
+            {
+              "id": "11754",
+              "datum": "2026-04-17 14:59:43",
+              "kommentar": "<p>Angebot für T700-FW1:<br><br>1.Teilenweiche mit Transportbänder auswechseln:<br>-Teile siehe Angebot MBO in Dateien<br>-Arbeit: Teilenweiche ca. 8Std. / Transportbänder ca. 4Std.<br><br>2. Seitenbelüftung R-Anleger auswechseln:<br>-Teile: - 2 Seitenbelüftungen kplt. (Gelenkschlauch), no. 10.2600.15<br id=\"isPasted\">- Arbeit: ca. 1Std.<br><br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"4\">Markus Fuchs</span> </p>",
+              "refUser": 17
+            },
+            {
+              "id": "11437",
+              "datum": "2026-03-31 11:42:34",
+              "kommentar": "<p>Tel. mit Joska-weiss Bescheid (siehe Info SA1004312)</p>",
+              "refUser": 17
+            },
+            {
+              "id": "11218",
+              "datum": "2026-03-19 09:42:33",
+              "kommentar": "<p>1.Angebot: FP-Anleger<br>Material:<br>- 2 Seitenbelüftungen kplt. (Gelenkschlauch), no. 10.2600.15<br>Arbeit: ca. 0,50 Std.<br><br>2. Angebot: PB Haube (2. Haube in Laufrichtung)<br>Material:<br>Arbeit: ca. 1Std.</p><p>Info: Angebot an Kunden mit Offerte 1004221 durch Beni an Jochen Konrath und Joska Malijanski<br><br>3. Angebot: Rep. Teilen Weiche<br>Material:</p>- 1 Weiche kplt.<br><p>- 15m Transportband zum einschweissen,<br>Arbeit:</p>",
+              "refUser": 17
+            }
+          ],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "13738",
+            "nummer": "1004070",
+            "bezeichnung": "EXPRESS: T700 Anleger kommt nicht in richtige Position",
+            "dokDatum": "2026-02-13",
+            "createDate": "2026-02-13 08:33:32",
+            "editDate": "2026-02-19 06:10:01",
+            "refProdukt": {
+              "id": "1109",
+              "titel": "Falzanlage   T700   401190",
+              "seriennummer": null
+            },
+            "refKunde": {
+              "id": "959",
+              "nummer": "60958"
+            }
+          },
+          "comments": [
+            {
+              "id": "10803",
+              "datum": "2026-02-19 06:09:47",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"17\">Josef Wagner</span> <span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> <br>Hoi Sepp. konntest du diesen Stecker bei Beni schon bestellen?",
+              "refUser": 4
+            },
+            {
+              "id": "10730",
+              "datum": "2026-02-13 10:19:29",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"17\">Josef Wagner</span> <br>es war die falsche Nummer hinterlegt im System <br>+41 76 805 91 95 diese ist richtig",
+              "refUser": 4
+            },
+            {
+              "id": "10723",
+              "datum": "2026-02-13 08:43:48",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"17\">Josef Wagner</span> <br>Kannst du mal kurz anrufen und schauen was los ist?",
+              "refUser": 4
+            },
+            {
+              "id": "10722",
+              "datum": "2026-02-13 08:35:48",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"20\">Service Gramag</span> <br><br>EXPRESS!<br>Benötigt dringend einen Techniker da Auftrag heute noch raus muss.<br><br>Gruess Aline",
+              "refUser": 6
+            }
+          ],
+          "parts": [
+            {
+              "id": "122460",
+              "anzahl": 1,
+              "preis": 11.2,
+              "nummer": "13471",
+              "titel": "Kabelbuchse M12 5pol gewinkelt",
+              "refArt": {
+                "id": "3473",
+                "nummer": "13471",
+                "lang1titel": "Kabelbuchse M12 5pol gewinkelt",
+                "herstellernr": "0131187"
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "12361",
+            "nummer": "1003639",
+            "bezeichnung": "MBO T700 Falzung",
+            "dokDatum": "2025-11-24",
+            "createDate": "2025-11-24 10:04:07",
+            "editDate": "2025-11-27 05:44:06",
+            "refProdukt": {
+              "id": "1109",
+              "titel": "Falzanlage   T700   401190",
+              "seriennummer": null
+            },
+            "refKunde": {
+              "id": "959",
+              "nummer": "60958"
+            }
+          },
+          "comments": [
+            {
+              "id": "9464",
+              "datum": "2025-11-24 14:19:06",
+              "kommentar": "<p>Ich habe mit dem Kunden telefoniert, er möchte einen Techniker vor Ort. Vielleicht <span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"18\">Denis Braun</span> am Mittwoch?</p>2te Falzwerk falzet schrägg. ",
+              "refUser": 15
+            },
+            {
+              "id": "9463",
+              "datum": "2025-11-24 13:41:44",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"15\">Daniel Baumann</span> <br>Hoi Dani<br><br>Bitte den Kunden anrufen, er hat bereits wieder angerufen, danke.",
+              "refUser": 6
+            },
+            {
+              "id": "9454",
+              "datum": "2025-11-24 10:09:24",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"15\">Daniel Baumann</span> <br>Kannst du bitte bei Gelegenheit dort anrufen? ",
+              "refUser": 4
+            },
+            {
+              "id": "9453",
+              "datum": "2025-11-24 10:06:13",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"20\">Service Gramag</span> <br>Dringend<br>MBO T700 zweite Falzung ist immer schräg.<br>Bitte Rückruf um Fehler zu beheben Tel. 076 / 805 35 13",
+              "refUser": 8
+            }
+          ],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "12274",
+            "nummer": "1003616",
+            "bezeichnung": "MBO T700 / Ultraschall \"Fehlbogen\" wird angezeigt ",
+            "dokDatum": "2025-11-19",
+            "createDate": "2025-11-19 08:30:38",
+            "editDate": "2025-11-25 16:58:56",
+            "refProdukt": {
+              "id": "1109",
+              "titel": "Falzanlage   T700   401190",
+              "seriennummer": null
+            },
+            "refKunde": {
+              "id": "959",
+              "nummer": "60958"
+            }
+          },
+          "comments": [
+            {
+              "id": "9483",
+              "datum": "2025-11-25 16:58:51",
+              "kommentar": "<p>ich archiviere den SA</p>",
+              "refUser": 4
+            },
+            {
+              "id": "9480",
+              "datum": "2025-11-25 16:41:00",
+              "kommentar": "<p>Hallo Markus<br>Habe nach nicht erreichen des Kunden den SA an Dich zurückgegeben zum archivieren.<br>Jetzt ist er wieder bei mir?!<br>Muss ich noch was unternehmen oder den SA archivieren?<br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"4\">Markus Fuchs</span> <br><br><br></p>",
+              "refUser": 17
+            },
+            {
+              "id": "9379",
+              "datum": "2025-11-19 09:55:26",
+              "kommentar": "<p>Probiert anzurufen-nicht erreicht.<br>Probiere es später noch einmal.<br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"4\">Markus Fuchs</span> </p>",
+              "refUser": 17
+            },
+            {
+              "id": "9377",
+              "datum": "2025-11-19 09:30:15",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"17\">Josef Wagner</span> <br>Könntest du anrufen? ",
+              "refUser": 4
+            },
+            {
+              "id": "9376",
+              "datum": "2025-11-19 08:33:28",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"20\">Service Gramag</span> Bitte Rückruf ",
+              "refUser": 10
+            }
+          ],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "12123",
+            "nummer": "1003566",
+            "bezeichnung": "T700 FW II: Schrägrollenrollen werden nicht angetrieben + Maschine startet nicht auf",
+            "dokDatum": "2025-11-12",
+            "createDate": "2025-11-12 08:12:45",
+            "editDate": "2025-11-17 08:57:51",
+            "refProdukt": {
+              "id": "1109",
+              "titel": "Falzanlage   T700   401190",
+              "seriennummer": null
+            },
+            "refKunde": {
+              "id": "959",
+              "nummer": "60958"
+            }
+          },
+          "comments": [
+            {
+              "id": "9339",
+              "datum": "2025-11-17 07:18:47",
+              "kommentar": "<p>fertig, verrechnen.</p>",
+              "refUser": 16
+            },
+            {
+              "id": "9274",
+              "datum": "2025-11-12 11:57:07",
+              "kommentar": "<p>Hr. Malianski anrufen 078/2080908<br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"16\">Christian Kunze</span> </p>",
+              "refUser": 17
+            },
+            {
+              "id": "9271",
+              "datum": "2025-11-12 10:50:31",
+              "kommentar": "<p>Tel. mit Herr Brune:<br>-FW2: Schrägrollen laufen nicht mehr<br>-Flachriemen verspannt und Schraube Spanner abgebrochen<br>-Wünscht Techniker Einsatz</p>",
+              "refUser": 17
+            },
+            {
+              "id": "9267",
+              "datum": "2025-11-12 09:42:23",
+              "kommentar": "<p>Tel. am 9.45 Uhr nicht erreicht. Versuche es später nochmals.</p>",
+              "refUser": 17
+            },
+            {
+              "id": "9264",
+              "datum": "2025-11-12 09:00:38",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"17\">Josef Wagner</span> <br>bitte Kunde kontaktieren",
+              "refUser": 4
+            },
+            {
+              "id": "9262",
+              "datum": "2025-11-12 08:16:41",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"20\">Service Gramag</span> dringend",
+              "refUser": 10
+            }
+          ],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "11530",
+            "nummer": "1003422",
+            "bezeichnung": "Unterstützung Falztasche tauschen an T700",
+            "dokDatum": "2025-10-17",
+            "createDate": "2025-10-17 10:58:30",
+            "editDate": "2025-10-17 15:44:04",
+            "refProdukt": {
+              "id": "1109",
+              "titel": "Falzanlage   T700   401190",
+              "seriennummer": null
+            },
+            "refKunde": {
+              "id": "959",
+              "nummer": "60958"
+            }
+          },
+          "comments": [
+            {
+              "id": "8800",
+              "datum": "2025-10-17 15:43:59",
+              "kommentar": "<p>Sepp hat es erledigt.</p>",
+              "refUser": 4
+            },
+            {
+              "id": "8785",
+              "datum": "2025-10-17 11:02:08",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"20\">Service Gramag</span> ",
+              "refUser": 6
+            }
+          ],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "9593",
+            "nummer": "1002832",
+            "bezeichnung": "MBO T700: Probleme beim Einrichten ",
+            "dokDatum": "2025-07-09",
+            "createDate": "2025-07-09 10:53:40",
+            "editDate": "2025-07-25 07:17:28",
+            "refProdukt": {
+              "id": "1109",
+              "titel": "Falzanlage   T700   401190",
+              "seriennummer": null
+            },
+            "refKunde": {
+              "id": "959",
+              "nummer": "60958"
+            }
+          },
+          "comments": [
+            {
+              "id": "7458",
+              "datum": "2025-07-24 08:56:51",
+              "kommentar": "<p>Kunde hat sich bei mir nicht mehr gemeldet.<br>Bitte den SA archivieren.<br><br></p>",
+              "refUser": 17
+            },
+            {
+              "id": "7231",
+              "datum": "2025-07-09 15:48:27",
+              "kommentar": "<p>Tel. mit Jonas Brune.<br>Hat Probleme im FW1 mit Schneiden und Rillen im Doppelnutzen.<br>Kunde hat es selber einigermassen hingekriegt.<br>Will aber noch mit Rillmesser Durchmesser 60.00 probieren. (Bestellung ist schon bei ETL)<br>Lasse SA noch eine Woche offen, wenn weitere Abklärungen kommen würden.</p>",
+              "refUser": 17
+            },
+            {
+              "id": "7230",
+              "datum": "2025-07-09 15:33:44",
+              "kommentar": "<p>Bitte zuhanden von Jonas Brune folgende Teile normal Post schicken.<br>-4 Rillmesser, No. 9105.00207<br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> </p>",
+              "refUser": 17
+            },
+            {
+              "id": "7212",
+              "datum": "2025-07-09 10:55:29",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"20\">Service Gramag</span> Dringend, wünscht noch heute Einsatz.",
+              "refUser": 10
+            }
+          ],
+          "parts": [
+            {
+              "id": "88725",
+              "anzahl": 4,
+              "preis": 9.75,
+              "nummer": "13677",
+              "titel": "Rillmesser",
+              "refArt": {
+                "id": "3679",
+                "nummer": "13677",
+                "lang1titel": "Rillmesser",
+                "herstellernr": "50210220"
+              }
+            },
+            {
+              "id": "88745",
+              "anzahl": 1,
+              "preis": 11,
+              "nummer": "20575",
+              "titel": "Zuschlag Mindestbestellmenge",
+              "refArt": {
+                "id": "10577",
+                "nummer": "20575",
+                "lang1titel": "Zuschlag Mindestbestellmenge",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88748",
+              "anzahl": 0,
+              "preis": 0,
+              "nummer": null,
+              "titel": null,
+              "refArt": {
+                "id": null,
+                "nummer": null,
+                "lang1titel": null,
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88749",
+              "anzahl": 0,
+              "preis": 5,
+              "nummer": "22553",
+              "titel": "Verpackung klein",
+              "refArt": {
+                "id": "12556",
+                "nummer": "22553",
+                "lang1titel": "Verpackung klein",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88750",
+              "anzahl": 0,
+              "preis": 8,
+              "nummer": "22554",
+              "titel": "Verpackung mittel",
+              "refArt": {
+                "id": "12557",
+                "nummer": "22554",
+                "lang1titel": "Verpackung mittel",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88751",
+              "anzahl": 0,
+              "preis": 12,
+              "nummer": "22555",
+              "titel": "Verpackung gross",
+              "refArt": {
+                "id": "12558",
+                "nummer": "22555",
+                "lang1titel": "Verpackung gross",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88752",
+              "anzahl": 1,
+              "preis": 2.5,
+              "nummer": "22630",
+              "titel": "Verpackung Luftpolstercouvert",
+              "refArt": {
+                "id": "12633",
+                "nummer": "22630",
+                "lang1titel": "Verpackung Luftpolstercouvert",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88753",
+              "anzahl": 0,
+              "preis": 50,
+              "nummer": "22556",
+              "titel": "Verpackung  Holzbox",
+              "refArt": {
+                "id": "12559",
+                "nummer": "22556",
+                "lang1titel": "Verpackung  Holzbox",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88754",
+              "anzahl": 1,
+              "preis": 8,
+              "nummer": "22605",
+              "titel": "Porto A+",
+              "refArt": {
+                "id": "12608",
+                "nummer": "22605",
+                "lang1titel": "Porto A+",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88755",
+              "anzahl": 0,
+              "preis": 15,
+              "nummer": "22558",
+              "titel": "Porto Priority bis 10 Kg.",
+              "refArt": {
+                "id": "12561",
+                "nummer": "22558",
+                "lang1titel": "Porto Priority bis 10 Kg.",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88756",
+              "anzahl": 0,
+              "preis": 28,
+              "nummer": "22559",
+              "titel": "Porto Priority bis 30 Kg.",
+              "refArt": {
+                "id": "12562",
+                "nummer": "22559",
+                "lang1titel": "Porto Priority bis 30 Kg.",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88757",
+              "anzahl": 0,
+              "preis": 36,
+              "nummer": "22560",
+              "titel": "Porto Priority Sperrgut",
+              "refArt": {
+                "id": "12563",
+                "nummer": "22560",
+                "lang1titel": "Porto Priority Sperrgut",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88758",
+              "anzahl": 0,
+              "preis": 27,
+              "nummer": "22561",
+              "titel": "Porto Express Mond bis 10 Kg.",
+              "refArt": {
+                "id": "12564",
+                "nummer": "22561",
+                "lang1titel": "Porto Express Mond bis 10 Kg.",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88759",
+              "anzahl": 0,
+              "preis": 34,
+              "nummer": "22562",
+              "titel": "Porto Express Mond bis 30 Kg.",
+              "refArt": {
+                "id": "12565",
+                "nummer": "22562",
+                "lang1titel": "Porto Express Mond bis 30 Kg.",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88760",
+              "anzahl": 0,
+              "preis": 42,
+              "nummer": "22563",
+              "titel": "Porto Express Mond Sperrgut",
+              "refArt": {
+                "id": "12566",
+                "nummer": "22563",
+                "lang1titel": "Porto Express Mond Sperrgut",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88761",
+              "anzahl": 0,
+              "preis": 100,
+              "nummer": "22564",
+              "titel": "Porto Sameday Zustellung bis 18.30 Uhr",
+              "refArt": {
+                "id": "12567",
+                "nummer": "22564",
+                "lang1titel": "Porto Sameday Zustellung bis 18.30 Uhr",
+                "herstellernr": null
+              }
+            },
+            {
+              "id": "88762",
+              "anzahl": 0,
+              "preis": 0,
+              "nummer": "22629",
+              "titel": "Spedition / Camion",
+              "refArt": {
+                "id": "12632",
+                "nummer": "22629",
+                "lang1titel": "Spedition / Camion",
+                "herstellernr": null
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "8041",
+            "nummer": "1002340",
+            "bezeichnung": "T700: Maschine startet nicht auf ",
+            "dokDatum": "2025-04-15",
+            "createDate": "2025-04-15 09:26:18",
+            "editDate": "2025-04-16 13:27:06",
+            "refProdukt": {
+              "id": "1109",
+              "titel": "Falzanlage   T700   401190",
+              "seriennummer": null
+            },
+            "refKunde": {
+              "id": "959",
+              "nummer": "60958"
+            }
+          },
+          "comments": [
+            {
+              "id": "5791",
+              "datum": "2025-04-16 12:03:31",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"4\">Markus Fuchs</span> <br><br>Ist erledigt!",
+              "refUser": 6
+            },
+            {
+              "id": "5788",
+              "datum": "2025-04-16 10:30:54",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> <br>Bitte Preis ergänzen bei der Sicherung",
+              "refUser": 4
+            },
+            {
+              "id": "5777",
+              "datum": "2025-04-15 09:30:54",
+              "kommentar": "<p>-Habe Termin bei Papyrus verschoben auf 16.4.25<br>-Gehe beim Kunden vorbei-Notfall</p>",
+              "refUser": 17
+            }
+          ],
+          "parts": [
+            {
+              "id": "76183",
+              "anzahl": 3,
+              "preis": 1.1,
+              "nummer": "13178",
+              "titel": "Sicherung 5x20mm 3.15A träge",
+              "refArt": {
+                "id": "3180",
+                "nummer": "13178",
+                "lang1titel": "Sicherung 5x20mm 3.15A träge",
+                "herstellernr": "300-90-100"
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "6192",
+            "nummer": "1001816",
+            "bezeichnung": "T700-Pendenzen abarbeiten ",
+            "dokDatum": "2025-01-21",
+            "createDate": "2025-01-21 15:54:00",
+            "editDate": "2025-01-28 06:49:13",
+            "refProdukt": {
+              "id": "1109",
+              "titel": "Falzanlage   T700   401190",
+              "seriennummer": null
+            },
+            "refKunde": {
+              "id": "959",
+              "nummer": "60958"
+            }
+          },
+          "comments": [],
+          "parts": [
+            {
+              "id": "57257",
+              "anzahl": 1,
+              "preis": 19.9,
+              "nummer": "10102",
+              "titel": "Lithiumbatterie CR2477N 3V 950mAh",
+              "refArt": {
+                "id": "104",
+                "nummer": "10102",
+                "lang1titel": "Lithiumbatterie CR2477N 3V 950mAh",
+                "herstellernr": "612820-UP/ 0131842 / 4302952"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "machine_id": "1144",
+      "exists_in_current_system": true,
+      "machine": {
+        "id": "1144",
+        "titel": "Schneidmaschine   WPS92 MCS KV2   Nr 3068-030",
+        "seriennummer": "3068-030",
+        "nummer": null,
+        "createDate": "2025-03-03 11:17:53",
+        "editDate": "2025-03-03 11:19:53",
+        "refKunde": {
+          "id": "110",
+          "nummer": "60109"
+        }
+      },
+      "service_documents": [
+        {
+          "service_document": {
+            "id": "14828",
+            "nummer": "1004407",
+            "bezeichnung": "WPS92: Handkupplung funktioniert nicht",
+            "dokDatum": "2026-04-20",
+            "createDate": "2026-04-20 08:00:45",
+            "editDate": "2026-04-22 11:09:58",
+            "refProdukt": {
+              "id": "1144",
+              "titel": "Schneidmaschine   WPS92 MCS KV2   Nr 3068-030",
+              "seriennummer": "3068-030"
+            },
+            "refKunde": {
+              "id": "110",
+              "nummer": "60109"
+            }
+          },
+          "comments": [
+            {
+              "id": "11810",
+              "datum": "2026-04-22 07:34:20",
+              "kommentar": "<p>Morge<br><br>Ich würde das, wie für die anderen auch auf Kulanz Remote Service nehmen.<br>Er kauft evtl. eine neue Maschine bei uns.</p>",
+              "refUser": 16
+            },
+            {
+              "id": "11783",
+              "datum": "2026-04-21 08:32:52",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"16\">Christian Kunze</span> <br>Hast du das mit dem Kunden abgemacht-<br>verrechnen oder 30 Min Kulanz auf Remote Service?",
+              "refUser": 4
+            },
+            {
+              "id": "11771",
+              "datum": "2026-04-20 11:10:40",
+              "kommentar": "<p>fertig, verrechnen.</p>",
+              "refUser": 16
+            },
+            {
+              "id": "11767",
+              "datum": "2026-04-20 10:25:21",
+              "kommentar": "<br><br>",
+              "refUser": 16
+            },
+            {
+              "id": "11765",
+              "datum": "2026-04-20 08:50:10",
+              "kommentar": "<strong><span style=\"font-size: 18px;\">Offerte Neumaschine 1004408</span></strong><br><a href=\"https://my.exxas.net/cloud/D96E2C9F5539ACB161A55F227DE1E235/gramag-ag/dokumente/14829\" id=\"isPasted\">Exxas - Cloud Business Platform</a>",
+              "refUser": 16
+            },
+            {
+              "id": "11757",
+              "datum": "2026-04-20 08:04:04",
+              "kommentar": "<p>bitte anrufen, <span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"16\">Christian Kunze</span> </p>",
+              "refUser": 10
+            }
+          ],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "7469",
+            "nummer": "1002203",
+            "bezeichnung": " WPS92: defekten Stecker auf CPU + I/O1 ersetzen ",
+            "dokDatum": "2025-03-24",
+            "createDate": "2025-03-24 09:51:15",
+            "editDate": "2025-03-26 07:17:33",
+            "refProdukt": {
+              "id": "1144",
+              "titel": "Schneidmaschine   WPS92 MCS KV2   Nr 3068-030",
+              "seriennummer": "3068-030"
+            },
+            "refKunde": {
+              "id": "110",
+              "nummer": "60109"
+            }
+          },
+          "comments": [],
+          "parts": [
+            {
+              "id": "70140",
+              "anzahl": 1,
+              "preis": 13.95,
+              "nummer": "23419",
+              "titel": "Dil-Gehäuse für Reed Relais 14pol",
+              "refArt": {
+                "id": "13422",
+                "nummer": "23419",
+                "lang1titel": "Dil-Gehäuse für Reed Relais 14pol",
+                "herstellernr": "3807654"
+              }
+            },
+            {
+              "id": "70327",
+              "anzahl": 1,
+              "preis": 2142.45,
+              "nummer": "23405",
+              "titel": "I/O Port 1 MCS KV2",
+              "refArt": {
+                "id": "13408",
+                "nummer": "23405",
+                "lang1titel": "I/O Port 1 MCS KV2",
+                "herstellernr": "3115.04.8019-42"
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "7059",
+            "nummer": "1002083",
+            "bezeichnung": "WPS92: diverse Fehler",
+            "dokDatum": "2025-03-03",
+            "createDate": "2025-03-03 11:44:18",
+            "editDate": "2025-03-06 09:11:43",
+            "refProdukt": {
+              "id": "1144",
+              "titel": "Schneidmaschine   WPS92 MCS KV2   Nr 3068-030",
+              "seriennummer": "3068-030"
+            },
+            "refKunde": {
+              "id": "110",
+              "nummer": "60109"
+            }
+          },
+          "comments": [],
+          "parts": []
+        }
+      ]
+    },
+    {
+      "machine_id": "157",
+      "exists_in_current_system": true,
+      "machine": {
+        "id": "157",
+        "titel": "Falzmaschine   M9 / R80   404406",
+        "seriennummer": "10 10 85 23 10 01",
+        "nummer": null,
+        "createDate": "2024-04-02 10:24:56",
+        "editDate": "2025-11-10 15:21:51",
+        "refKunde": {
+          "id": "59",
+          "nummer": "60058"
+        }
+      },
+      "service_documents": [
+        {
+          "service_document": {
+            "id": "14265",
+            "nummer": "1004220",
+            "bezeichnung": "Probleme HHS Kamerasystem",
+            "dokDatum": "2026-03-17",
+            "createDate": "2026-03-17 08:06:30",
+            "editDate": "2026-04-22 12:48:16",
+            "refProdukt": {
+              "id": "157",
+              "titel": "Falzmaschine   M9 / R80   404406",
+              "seriennummer": "10 10 85 23 10 01"
+            },
+            "refKunde": {
+              "id": "59",
+              "nummer": "60058"
+            }
+          },
+          "comments": [
+            {
+              "id": "11452",
+              "datum": "2026-04-01 10:33:15",
+              "kommentar": "<p>Techniker von HHS vor Ort für Wartungen und \"Verifizierungscheck\". <br>Probleme angesprochen bzgl. Einstellung Kamerasystem an Xtend3.<br>An M7 hat der Techniker die Kamera oben auf Abstand 130mm eingestellt und Einstellwerte Kamera verändert. Danach besser. Ob gut wird die Produktion zeigen.<br>Der Techniker schaut sich die 2 M9 oben auch noch an und macht Anpassungen</p>",
+              "refUser": 22
+            }
+          ],
+          "parts": []
+        },
+        {
+          "service_document": {
+            "id": "14729",
+            "nummer": "1004374",
+            "bezeichnung": "Probleme Water Scoring nach Zügeln",
+            "dokDatum": "2026-04-13",
+            "createDate": "2026-04-13 16:05:25",
+            "editDate": "2026-04-22 08:53:02",
+            "refProdukt": {
+              "id": "157",
+              "titel": "Falzmaschine   M9 / R80   404406",
+              "seriennummer": "10 10 85 23 10 01"
+            },
+            "refKunde": {
+              "id": "59",
+              "nummer": "60058"
+            }
+          },
+          "comments": [
+            {
+              "id": "11750",
+              "datum": "2026-04-17 12:23:47",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"7\">Ulrich Schneider</span> <span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"4\">Markus Fuchs</span> Hoi Uli. Ich gebe dir das mal für Montag weiter. Termin habe ich eingestellt.",
+              "refUser": 22
+            },
+            {
+              "id": "11737",
+              "datum": "2026-04-17 06:50:12",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"10\">Nuria Gilli</span> Moin Nuria. Hast du was von MBO gehört bzgl. des Liefertermins?<br>Herr Strohmeier hat uns heute morgen schon angeschrieben.",
+              "refUser": 22
+            },
+            {
+              "id": "11720",
+              "datum": "2026-04-16 11:12:06",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"10\">Nuria Gilli</span> Hoi Nuria. Ich hatte eben telefonischen Kontakt mit Birkhäuser. Dabei kam dieser SA zur Sprache.<br>Ich habe eben gesehen, dass das ET Teil auf 07.05. bestätigt wurde. Das geht nicht. Die Maschine steht. Bitte bei MBO nachhaken. Danke",
+              "refUser": 22
+            },
+            {
+              "id": "11667",
+              "datum": "2026-04-15 09:05:38",
+              "kommentar": "<p>bestellt<br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"22\">Olaf Haug</span> informierst du den Kunden über den Preis?</p>",
+              "refUser": 10
+            },
+            {
+              "id": "11639",
+              "datum": "2026-04-14 11:46:13",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> <br><br>Bitte beschaffen: (MBO, Artikel ist diesem SA angehängt)<br><br>1 Stk<br><div><div class=\"editorComponentProxyImageResizeRow\" data-component=\"editorComponentProxyImageResizeRow\" data-name-datei=\"kommentar1776159945053_T1776159945054.png\" data-style=\"\" data-url=\"https://my.exxas.net/cloud/D96E2C9F5539ACB161A55F227DE1E235/api/proxy?u=7&amp;m=1&amp;f=75154&amp;s=6ad028add2d89ab88a69a00372252d4b\"> </div><br></div><br><br>",
+              "refUser": 7
+            },
+            {
+              "id": "11621",
+              "datum": "2026-04-13 16:06:41",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"16\">Christian Kunze</span> bitte morgen früh mal anschauen",
+              "refUser": 22
+            }
+          ],
+          "parts": [
+            {
+              "id": "130798",
+              "anzahl": 1,
+              "preis": 1174.3,
+              "nummer": "24107",
+              "titel": "Drehgeber Br22",
+              "refArt": {
+                "id": "14113",
+                "nummer": "24107",
+                "lang1titel": "Drehgeber Br22",
+                "herstellernr": "171.5200.0006"
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "13149",
+            "nummer": "1003869",
+            "bezeichnung": "M9 Tasche11 defekt",
+            "dokDatum": "2026-01-15",
+            "createDate": "2026-01-15 10:06:41",
+            "editDate": "2026-04-13 09:12:56",
+            "refProdukt": {
+              "id": "157",
+              "titel": "Falzmaschine   M9 / R80   404406",
+              "seriennummer": "10 10 85 23 10 01"
+            },
+            "refKunde": {
+              "id": "59",
+              "nummer": "60058"
+            }
+          },
+          "comments": [
+            {
+              "id": "11582",
+              "datum": "2026-04-10 19:36:59",
+              "kommentar": "<p>Reisezeit auf SA 1003789<br>Verrechnung abklären mit Olaf</p>",
+              "refUser": 17
+            },
+            {
+              "id": "11241",
+              "datum": "2026-03-20 08:35:31",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"17\">Josef Wagner</span> Hoi Sepp. Der Einlauf liegt bei uns im Gestell.",
+              "refUser": 22
+            },
+            {
+              "id": "10715",
+              "datum": "2026-02-13 07:17:35",
+              "kommentar": "<p>Beim Zügeln mit erledigen</p>",
+              "refUser": 22
+            }
+          ],
+          "parts": [
+            {
+              "id": "118698",
+              "anzahl": 1,
+              "preis": 0,
+              "nummer": "10009",
+              "titel": "Tascheneinlauf",
+              "refArt": {
+                "id": "12554",
+                "nummer": "10009",
+                "lang1titel": "Dummy Material Kundendienst",
+                "herstellernr": null
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "14172",
+            "nummer": "1004193",
+            "bezeichnung": "Messerwellenkasette + Rastbozen ",
+            "dokDatum": "2026-03-11",
+            "createDate": "2026-03-11 16:20:58",
+            "editDate": "2026-03-30 13:14:10",
+            "refProdukt": {
+              "id": "157",
+              "titel": "Falzmaschine   M9 / R80   404406",
+              "seriennummer": "10 10 85 23 10 01"
+            },
+            "refKunde": {
+              "id": "59",
+              "nummer": "60058"
+            }
+          },
+          "comments": [
+            {
+              "id": "11396",
+              "datum": "2026-03-28 08:35:53",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"22\">Olaf Haug</span> <br>Montag besprechen",
+              "refUser": 4
+            },
+            {
+              "id": "11391",
+              "datum": "2026-03-27 17:38:38",
+              "kommentar": "<p>Verrechnung abklären mit Olaf</p>",
+              "refUser": 17
+            },
+            {
+              "id": "11357",
+              "datum": "2026-03-27 07:31:31",
+              "kommentar": "<p>Hoi Sepp. Ich habe diesen SA auf dich umgestellt. </p>",
+              "refUser": 22
+            },
+            {
+              "id": "11346",
+              "datum": "2026-03-26 16:30:03",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"17\">Josef Wagner</span> <br>Hallo Sepp<br>Die Teile sind im SA Gestell<br>Gruss Beni",
+              "refUser": 8
+            },
+            {
+              "id": "11344",
+              "datum": "2026-03-26 16:10:31",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"8\">Benjamin Gabriel</span> Hoi Benni. Frag doch bitte mal den Sepp. Der hat das ja aufgenommen und das bestimmt besser einschätzen als ich.",
+              "refUser": 22
+            },
+            {
+              "id": "11343",
+              "datum": "2026-03-26 15:55:26",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"22\">Olaf Haug</span> <br>Teile sind eingetroffen, werden diese Versendet oder gibt es einen Technikereinsatz?",
+              "refUser": 8
+            },
+            {
+              "id": "11187",
+              "datum": "2026-03-18 07:52:50",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"21\">Ersatzteile Gramag</span> Bitte aus dem Angebot von MBO die Positionen 3x bestellen",
+              "refUser": 22
+            },
+            {
+              "id": "11184",
+              "datum": "2026-03-18 07:08:40",
+              "kommentar": "<p>Hallo Olaf<br>Hier noch das Angebot von MBO für den Rastbolzen MWK M9 (siehe Dateien)<br>Von diesen könnest Du auch noch 3 kplt. Stck. bestellen.<br>Gemäss Fabio sind an anderen Maschinen diese Bolzen auch defekt.<br>Danke und Gruss Sepp<br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"22\">Olaf Haug</span> </p>",
+              "refUser": 17
+            },
+            {
+              "id": "11139",
+              "datum": "2026-03-16 07:23:22",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"17\">Josef Wagner</span> Habe die Anlage erfasst",
+              "refUser": 22
+            },
+            {
+              "id": "11093",
+              "datum": "2026-03-11 16:22:36",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"17\">Josef Wagner</span> <br>Ich weiss nicht um welche M9 es geht, daher habe ich die Maschine noch nicht erfasst.",
+              "refUser": 4
+            }
+          ],
+          "parts": [
+            {
+              "id": "126665",
+              "anzahl": 3,
+              "preis": 14.7,
+              "nummer": "22334",
+              "titel": "T-Griff GN 563-55-M8",
+              "refArt": {
+                "id": "12336",
+                "nummer": "22334",
+                "lang1titel": "T-Griff GN 563-55-M8",
+                "herstellernr": "0100260"
+              }
+            },
+            {
+              "id": "126666",
+              "anzahl": 3,
+              "preis": 28.35,
+              "nummer": "24081",
+              "titel": "Bolzen",
+              "refArt": {
+                "id": "14087",
+                "nummer": "24081",
+                "lang1titel": "Bolzen",
+                "herstellernr": "1362938"
+              }
+            }
+          ]
+        },
+        {
+          "service_document": {
+            "id": "11332",
+            "nummer": "1003370",
+            "bezeichnung": " M9 Zügeln ",
+            "dokDatum": "2025-10-08",
+            "createDate": "2025-10-08 13:12:10",
+            "editDate": "2025-11-05 10:33:26",
+            "refProdukt": {
+              "id": "157",
+              "titel": "Falzmaschine   M9 / R80   404406",
+              "seriennummer": "10 10 85 23 10 01"
+            },
+            "refKunde": {
+              "id": "59",
+              "nummer": "60058"
+            }
+          },
+          "comments": [
+            {
+              "id": "9116",
+              "datum": "2025-11-05 09:35:37",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"18\">Denis Braun</span> <br>Jetzt kannst du deine Stunden richtig eintragen",
+              "refUser": 4
+            },
+            {
+              "id": "9046",
+              "datum": "2025-10-31 07:04:24",
+              "kommentar": "<p>da ist noch was dazu: <a href=\"https://my.exxas.net/cloud/D96E2C9F5539ACB161A55F227DE1E235/gramag-ag/dokumente/11858\" id=\"isPasted\">Exxas - Cloud Business Platform</a> <br><br>fertig, verrechnen?</p>",
+              "refUser": 7
+            },
+            {
+              "id": "9027",
+              "datum": "2025-10-30 11:19:09",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"4\">Markus Fuchs</span> <br><br>ich ziehe meinen Mittag vor und bin dann um 13:30h vor Ort",
+              "refUser": 7
+            },
+            {
+              "id": "9026",
+              "datum": "2025-10-30 11:13:47",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"7\">Ulrich Schneider</span> <br>Bitte noch kurz mit Sepp Rücksprache halten.<br><br>Thomas war vor Ort, die Anlage läuft aber sie können diese nicht einsetzen da die eine Presse nicht läuft.<br><br>Frage; würdest du mal dein Wissen Vorort einsetzen? <br>Rufe dich gleich noch an<br><br>Kontaktperson: +41 79 806 05 09 Agon Vejseli",
+              "refUser": 4
+            },
+            {
+              "id": "8997",
+              "datum": "2025-10-29 15:31:56",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"4\">Markus Fuchs</span> doch, läuft. Provisorisch. Mit 1 Presse weniger.",
+              "refUser": 15
+            },
+            {
+              "id": "8996",
+              "datum": "2025-10-29 15:30:02",
+              "kommentar": "<p>Das heisst diese Maschine läuft jetzt nicht? </p>",
+              "refUser": 4
+            },
+            {
+              "id": "8995",
+              "datum": "2025-10-29 15:09:12",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"4\">Markus Fuchs</span> <span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"22\">Olaf Haug</span> Herr Röhrich von MBO muss diese Fall intern weitergegeben, er meldet sich bei uns wann die Lösung gefunden haben. ",
+              "refUser": 15
+            },
+            {
+              "id": "8811",
+              "datum": "2025-10-20 09:01:55",
+              "kommentar": "<div><div class=\"editorComponentProxyFileRow\" data-component=\"editorComponentProxyFileRow\" data-name-datei=\"M9_T1760943536046.msg\" data-url=\"https://my.exxas.net/cloud/D96E2C9F5539ACB161A55F227DE1E235/api/proxy?u=22&amp;m=1&amp;f=50463&amp;s=1186be0b41256427e99c009cf407f6ca\"> </div></div><br>Im Anhang sind die Angaben zu den Höhen von M9 ",
+              "refUser": 22
+            },
+            {
+              "id": "8740",
+              "datum": "2025-10-14 14:49:31",
+              "kommentar": "<p>Ich habe jetzt mal 23./24.10. Umzug eingeplant<br>und 27.10. Unterstützung von Michael Fischer.<br><span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"22\">Olaf Haug</span> </p>",
+              "refUser": 17
+            },
+            {
+              "id": "8667",
+              "datum": "2025-10-08 14:17:01",
+              "kommentar": "<span class=\"fr-deletable fr-tribute\" contenteditable=\"false\" notified=\"true\" uid=\"17\">Josef Wagner</span> Bitte mal den 23./24./27.10. für diesen SA blockieren.",
+              "refUser": 22
+            }
+          ],
+          "parts": []
+        }
+      ]
+    }
+  ]
+}
