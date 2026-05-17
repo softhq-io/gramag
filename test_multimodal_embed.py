@@ -1,4 +1,8 @@
-"""
+"""Deprecated Gemini multimodal embedding comparison.
+
+Runtime code now uses Azure OpenAI via ai_client.py. This comparison depends
+on Gemini-specific image embeddings and is retained only as historical work.
+
 Side-by-side comparison: text embeddings vs multimodal image embeddings
 on the DPM/PEM operating instructions PDF.
 
@@ -8,6 +12,7 @@ Usage:
 """
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -17,7 +22,7 @@ import numpy as np
 from google import genai
 from google.genai import types
 
-from config import GEMINI_API_KEY
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # ── Config ──────────────────────────────────────────────────────────────
 PDF_PATH = Path("/Users/piotrzwolinski/Downloads/DPMOpgUE.pdf")

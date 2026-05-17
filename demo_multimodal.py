@@ -1,4 +1,7 @@
-"""
+"""Deprecated Gemini multimodal demo.
+
+Runtime code now uses Azure OpenAI via ai_client.py.
+
 Interactive demo: multimodal knowledge base retrieval + generation.
 Serves a web UI on http://localhost:8001
 
@@ -7,6 +10,7 @@ Uses cached indices from test_multimodal_embed.py.
 
 import base64
 import json
+import os
 import time
 from pathlib import Path
 
@@ -18,7 +22,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
-from config import GEMINI_API_KEY
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # ── Config ──────────────────────────────────────────────────────────────
 CACHE_DIR = Path(__file__).parent / "test_embed_cache"

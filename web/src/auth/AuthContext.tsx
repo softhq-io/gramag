@@ -1,19 +1,6 @@
-import { createContext, useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { login as apiLogin, fetchMe, logout as apiLogout, type User } from '../api/auth'
-
-interface AuthCtx {
-  user: User | null
-  loading: boolean
-  login: (username: string, password: string) => Promise<void>
-  logout: () => void
-}
-
-export const AuthContext = createContext<AuthCtx>({
-  user: null,
-  loading: true,
-  login: async () => {},
-  logout: () => {},
-})
+import { AuthContext } from './authContextValue'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)

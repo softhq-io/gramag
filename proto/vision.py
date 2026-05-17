@@ -1,17 +1,14 @@
-"""Gemini 3 Flash vision extraction for PDF pages and image assets."""
+"""Azure OpenAI vision extraction for PDF pages and image assets."""
 
 import time
+import base64
 from pathlib import Path
 
-from google import genai
-from google.genai import types
+from ai_client import chat, image_content, vision_chat
+from config import AZURE_OPENAI_CHAT_DEPLOYMENT, AZURE_OPENAI_VISION_DEPLOYMENT
 
-from config import GEMINI_API_KEY
-
-VISION_MODEL = "gemini-3-flash-preview"
-DEEP_VISION_MODEL = "gemini-3-pro-preview"
-
-client = genai.Client(api_key=GEMINI_API_KEY)
+VISION_MODEL = AZURE_OPENAI_VISION_DEPLOYMENT
+DEEP_VISION_MODEL = AZURE_OPENAI_VISION_DEPLOYMENT
 
 
 PAGE_EXTRACTION_PROMPT = """\
@@ -98,26 +95,19 @@ KEY VALUES: <comma-separated: sizes, formats, counts, addresses, codes actually 
 SEARCHABLE: <3-4 sentences describing the file so a natural-language query can hit it>"""
 
 
-def _gen(prompt_parts, model: str = VISION_MODEL, max_tokens: int = 3000) -> str:
-    resp = client.models.generate_content(
-        model=model,
-        contents=[types.Content(role="user", parts=prompt_parts)],
-        config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=max_tokens),
-    )
-    return resp.text or ""
+def _gen(content: list[dict], model: str = VISION_MODEL, max_tokens: int = 3000) -> str:
+    return vision_chat(content, deployment=model, temperature=0.1, max_tokens=max_tokens)
 
 
 def vision_extract_page(png_path: str | Path, *, deep: bool = False) -> str:
-    with open(png_path, "rb") as f:
-        img_bytes = f.read()
-    parts = [
-        types.Part.from_bytes(data=img_bytes, mime_type="image/png"),
-        types.Part(text=PAGE_EXTRACTION_PROMPT),
+    content = [
+        {"type": "text", "text": PAGE_EXTRACTION_PROMPT},
+        image_content(png_path, mime_type="image/png"),
     ]
-    return _gen(parts, model=DEEP_VISION_MODEL if deep else VISION_MODEL)
+    return _gen(content, model=DEEP_VISION_MODEL if deep else VISION_MODEL)
 
 
-GEMINI_NATIVE_MIMES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+AZURE_OPENAI_NATIVE_MIMES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 
 
 def vision_caption_image(img_path: str | Path, *, deep: bool = False) -> str:
@@ -140,17 +130,22 @@ def vision_caption_image(img_path: str | Path, *, deep: bool = False) -> str:
         img_bytes = buf.getvalue()
         mime = "image/png"
 
-    parts = [
-        types.Part.from_bytes(data=img_bytes, mime_type=mime),
-        types.Part(text=IMAGE_CAPTION_PROMPT),
+    content = [
+        {"type": "text", "text": IMAGE_CAPTION_PROMPT},
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:{mime};base64,{base64.b64encode(img_bytes).decode('ascii')}",
+                "detail": "high",
+            },
+        },
     ]
-    return _gen(parts, model=DEEP_VISION_MODEL if deep else VISION_MODEL, max_tokens=2000)
+    return _gen(content, model=DEEP_VISION_MODEL if deep else VISION_MODEL, max_tokens=2000)
 
 
 def summarize_config(name: str, content: str) -> str:
     prompt = CONFIG_SUMMARY_PROMPT.format(name=name, content=content[:4000])
-    parts = [types.Part(text=prompt)]
-    return _gen(parts, model=VISION_MODEL, max_tokens=1500)
+    return chat(prompt, deployment=AZURE_OPENAI_CHAT_DEPLOYMENT, temperature=0.1, max_tokens=1500)
 
 
 def with_retry(fn, *args, tries: int = 3, backoff: float = 4.0, **kwargs):

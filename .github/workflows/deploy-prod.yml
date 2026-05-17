@@ -3,6 +3,7 @@ name: Deploy — Prod
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -15,16 +16,23 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: true
 
     steps:
       - name: Checkout gramag
         uses: actions/checkout@v4
 
-      - name: Frontend lint
+      - name: Backend syntax check
+        run: python -m compileall -q .
+
+      - name: Frontend check
         working-directory: web
         run: |
           npm ci
           npm run lint
+          npm run build
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -56,7 +64,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: softhq-io/gramag-infra
-          token: ${{ secrets.INFRA_REPO_PAT }}
+          ssh-key: ${{ secrets.INFRA_REPO_DEPLOY_KEY }}
           path: gramag-infra
 
       - name: Install OpenTofu
@@ -74,11 +82,11 @@ jobs:
       - name: tofu apply
         working-directory: gramag-infra/prod
         env:
+          TF_IN_AUTOMATION: "true"
           ARM_USE_OIDC: "true"
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET_PROD }}
         run: tofu apply -auto-approve -var "image_tag=${{ github.sha }}"

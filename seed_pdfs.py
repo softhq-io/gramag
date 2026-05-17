@@ -2,7 +2,7 @@
 
 Pipeline per PDF:
 1. Extract text (PyMuPDF) -> smart chunk (~1500 chars)
-2. Embed each chunk (Gemini embedding-001)
+2. Embed each chunk (Azure OpenAI embeddings)
 3. LLM structured extraction per chunk -> error codes, troubleshooting, procedures
 4. Write to graph: ManualSection, ErrorCode, TroubleshootingEntry
 5. Cross-link: Part -> MENTIONED_IN -> ManualSection via manufacturer_nr matching
@@ -24,14 +24,11 @@ import argparse
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import fitz  # PyMuPDF
-from google import genai
-from google.genai import types
-from config import GEMINI_API_KEY, PDF_DIR, EXTRACTION_MODEL
+from ai_client import json_chat
+from config import PDF_DIR
 from db import db, GraphConnection
 from db_helpers import result_to_dicts
 from embeddings import generate_embeddings_batch
-
-client = genai.Client(api_key=GEMINI_API_KEY)
 
 CHECKPOINT_FILE = "/Users/piotrzwolinski/projects/gramag/seed_pdfs_checkpoint.json"
 
@@ -148,16 +145,7 @@ def extract_structured(chunk_text: str, doc_name: str, supplier: str, pages: lis
 
     for attempt in range(3):
         try:
-            response = client.models.generate_content(
-                model=EXTRACTION_MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.1,
-                    http_options={"timeout": 60_000},
-                ),
-            )
-            parsed = json.loads(response.text)
+            parsed = json.loads(json_chat(prompt, temperature=0.1, max_tokens=2000))
             if isinstance(parsed, list):
                 parsed = parsed[0] if parsed and isinstance(parsed[0], dict) else {}
             if not isinstance(parsed, dict):
@@ -392,7 +380,7 @@ def main():
 
     print("=" * 60)
     print("  Gramag Knowledge Graph — PDF Seed")
-    print(f"  Model: {EXTRACTION_MODEL}, Workers: {args.workers}")
+    print(f"  Provider: Azure OpenAI, Workers: {args.workers}")
     if args.sample:
         print(f"  SAMPLE MODE: {args.sample} PDFs")
     print("=" * 60)

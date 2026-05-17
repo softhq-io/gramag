@@ -90,10 +90,14 @@ You should see:
 /data/cache/pages/<sha>/p0001.png ...
 ```
 
-## 6. Set Gemini API key as a secret
+## 6. Set Azure OpenAI and auth secrets
 
 ```bash
-fly secrets set GEMINI_API_KEY=your_key_here
+fly secrets set AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+fly secrets set AZURE_OPENAI_API_KEY=your_key_here
+fly secrets set AZURE_OPENAI_CHAT_DEPLOYMENT=gramag-chat
+fly secrets set AZURE_OPENAI_VISION_DEPLOYMENT=gramag-vision
+fly secrets set AZURE_OPENAI_EMBED_DEPLOYMENT=gramag-embed
 fly secrets set JWT_SECRET=$(openssl rand -hex 32)
 ```
 
@@ -124,7 +128,7 @@ Open `https://gramag-proto.fly.dev/einsatzplaner/proto`, log in, test a query.
 
 ## Future: scaling to all 14 machines
 
-The multimodal ingest can run locally (fast, your Gemini quota) and the
+The multimodal ingest can run locally against Azure OpenAI quota and the
 resulting dump.rdb + new cache pages re-bundled and re-uploaded:
 
 ```bash

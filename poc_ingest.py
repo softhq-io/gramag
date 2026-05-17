@@ -1,4 +1,8 @@
-"""
+"""Deprecated Gemini proof-of-concept script.
+
+Runtime code now uses Azure OpenAI via ai_client.py. This file is retained
+only as historical exploration and is not part of the supported local run path.
+
 Gramag PDF Ingestion — Proof of Concept
 Tests 3 tiers on 5 diverse PDFs to validate quality before scaling.
 
@@ -17,7 +21,7 @@ from collections import defaultdict
 
 # ── Config ──────────────────────────────────────────────────────────────
 
-GEMINI_API_KEY = "AIzaSyAhTT1Pt6mFwEqNfBnJui7zt0ovjZs5p88"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 FLASH_MODEL = "gemini-2.0-flash"

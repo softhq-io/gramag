@@ -6,15 +6,13 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from google import genai
-from google.genai import types
-from config import GEMINI_API_KEY, INDEX_DIR, CHAT_MODEL, PDF_DIR
+from ai_client import chat
+from config import INDEX_DIR, PDF_DIR
+from embeddings import generate_query_embedding
 from auth_router import router as auth_router
 from mission_router import router as mission_router
 from fleet_router import router as fleet_router
 from proto.router import router as proto_router
-
-client = genai.Client(api_key=GEMINI_API_KEY)
 
 app = FastAPI(title="Gramag Knowledge Assistant")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -58,12 +56,7 @@ def load():
 
 
 def search(query: str, top_k: int = 12):
-    r = client.models.embed_content(
-        model="gemini-embedding-001",
-        contents=[query],
-        config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY"),
-    )
-    qv = np.array(r.embeddings[0].values, dtype=np.float32)
+    qv = np.array(generate_query_embedding(query), dtype=np.float32)
     qv /= np.linalg.norm(qv)
     scores = emb_matrix @ qv
     top_idx = np.argsort(scores)[-top_k:][::-1]
@@ -95,9 +88,7 @@ def ask(q: Question):
 
     ctx = "\n\n---\n\n".join(ctx_parts)
 
-    resp = client.models.generate_content(
-        model=CHAT_MODEL,
-        contents=[{"role": "user", "parts": [{"text": f"""You are a technical assistant for Gramag Grafische Maschinen AG, a Swiss company servicing printing, folding, cutting, enveloping, and labelling machines.
+    answer = chat(f"""You are a technical assistant for Gramag Grafische Maschinen AG, a Swiss company servicing printing, folding, cutting, enveloping, and labelling machines.
 
 RULES:
 - Answer ONLY from context. Do not invent.
@@ -109,11 +100,9 @@ RULES:
 CONTEXT:
 {ctx}
 
-QUESTION: {q.query}"""}]}],
-        config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=2000),
-    )
+QUESTION: {q.query}""", temperature=0.2, max_tokens=2000)
 
-    return {"answer": resp.text, "sources": sources}
+    return {"answer": answer, "sources": sources}
 
 
 @app.get("/api/search")
@@ -197,15 +186,11 @@ DETECTED INTENT: {json.dumps(intent)}
 
 QUESTION: {q.query}"""
 
-    resp = client.models.generate_content(
-        model=CHAT_MODEL,
-        contents=[{"role": "user", "parts": [{"text": prompt}]}],
-        config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=2000),
-    )
+    answer = chat(prompt, temperature=0.2, max_tokens=2000)
 
     graph_vector_count = sum(1 for s in sources if s["method"] == "graph_vector")
     return {
-        "answer": resp.text,
+        "answer": answer,
         "sources": sources,
         "intent": intent,
         "graph_results": len(graph_parts) + graph_vector_count,

@@ -1,4 +1,7 @@
-"""
+"""Deprecated Gemini bulk ingest experiment.
+
+Runtime code now uses Azure OpenAI via ai_client.py.
+
 Gramag Mini PoC — Step 1: Ingest everything into a single JSON index.
 PDFs + ERP key tables → chunks with embeddings.
 """
@@ -6,7 +9,7 @@ import os, json, csv, time, fitz
 from google import genai
 from google.genai import types
 
-GEMINI_API_KEY = "AIzaSyAhTT1Pt6mFwEqNfBnJui7zt0ovjZs5p88"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 client = genai.Client(api_key=GEMINI_API_KEY)
 EMBED_MODEL = "gemini-embedding-001"
 

@@ -1,4 +1,7 @@
-"""
+"""Deprecated Gemini chat CLI.
+
+Runtime code now uses Azure OpenAI via ai_client.py.
+
 Gramag Knowledge Assistant — Mini PoC
 Ask questions about machines, spare parts, and service manuals.
 
@@ -9,7 +12,7 @@ import pickle, os, sys
 from google import genai
 from google.genai import types
 
-GEMINI_API_KEY = "AIzaSyAhTT1Pt6mFwEqNfBnJui7zt0ovjZs5p88"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 client = genai.Client(api_key=GEMINI_API_KEY)
 EMBED_MODEL = "gemini-embedding-001"
 CHAT_MODEL = "gemini-2.0-flash"

@@ -3,6 +3,7 @@ import { askProto, getCustomerOverview, getProtoSection } from '../api/proto'
 import type { CustomerOverview, ProtoAnswerResponse, ProtoHit } from '../api/proto'
 
 type Mode = 'site' | 'machine' | 'ask'
+type ProtoSectionDetail = Awaited<ReturnType<typeof getProtoSection>>
 
 export function ProtoPage() {
   const [overview, setOverview] = useState<CustomerOverview | null>(null)
@@ -14,9 +15,7 @@ export function ProtoPage() {
   const [response, setResponse] = useState<ProtoAnswerResponse | null>(null)
   const [deep, setDeep] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
-  const [sectionDetail, setSectionDetail] = useState<Awaited<
-    ReturnType<typeof getProtoSection>
-  > | null>(null)
+  const [sectionDetail, setSectionDetail] = useState<ProtoSectionDetail | null>(null)
   const [activeCite, setActiveCite] = useState<number | null>(null)
   const [hersteller, setHersteller] = useState<string>('Alle')
   const [sonstigesOpen, setSonstigesOpen] = useState(false)
@@ -470,8 +469,8 @@ function AskView({
   activeCite: number | null
   setActiveCite: (n: number | null) => void
   showSection: (id: string | undefined, idx: number) => void
-  sectionDetail: Awaited<ReturnType<typeof getProtoSection>> | null
-  setSectionDetail: (s: any) => void
+  sectionDetail: ProtoSectionDetail | null
+  setSectionDetail: (s: ProtoSectionDetail | null) => void
   setLightbox: (s: string | null) => void
   scope: string
   onBack: () => void

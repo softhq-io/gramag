@@ -1,12 +1,9 @@
 """Rebuild embeddings_normed.npy from existing metadata.pkl (skips PDF/CSV re-ingestion)."""
 import os, pickle, time
 import numpy as np
-from google import genai
-from google.genai import types
-from config import GEMINI_API_KEY, INDEX_DIR
+from config import INDEX_DIR
+from embeddings import generate_embeddings_batch, generate_embedding
 
-client = genai.Client(api_key=GEMINI_API_KEY)
-EMBED_MODEL = "gemini-embedding-001"
 BATCH = 100
 
 with open(os.path.join(INDEX_DIR, "metadata.pkl"), "rb") as f:
@@ -20,24 +17,14 @@ for i in range(0, len(metadata), BATCH):
     batch = metadata[i:i+BATCH]
     texts = [c["text"] for c in batch]
     try:
-        r = client.models.embed_content(
-            model=EMBED_MODEL,
-            contents=texts,
-            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
-        )
-        for j, e in enumerate(r.embeddings):
-            embeddings[i+j] = e.values
+        for j, e in enumerate(generate_embeddings_batch(texts, batch_size=BATCH, delay=0)):
+            embeddings[i+j] = e
     except Exception as ex:
         print(f"  Error batch {i}: {ex} — retrying once")
         time.sleep(3)
         try:
-            r = client.models.embed_content(
-                model=EMBED_MODEL,
-                contents=texts,
-                config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
-            )
-            for j, e in enumerate(r.embeddings):
-                embeddings[i+j] = e.values
+            for j, e in enumerate(generate_embeddings_batch(texts, batch_size=BATCH, delay=0)):
+                embeddings[i+j] = e
         except Exception as ex2:
             print(f"  FAILED batch {i}: {ex2}")
 
@@ -55,12 +42,7 @@ if missing:
     print(f"Retrying {len(missing)} missing embeddings...")
     for i in missing:
         try:
-            r = client.models.embed_content(
-                model=EMBED_MODEL,
-                contents=[metadata[i]["text"]],
-                config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
-            )
-            embeddings[i] = r.embeddings[0].values
+            embeddings[i] = generate_embedding(metadata[i]["text"])
         except Exception as ex:
             print(f"  Still failed idx {i}: {ex}")
 

@@ -1,18 +1,14 @@
-"""Multimodal answer generation — retrieved pages/images as attachments to Gemini."""
+"""Multimodal answer generation using Azure OpenAI vision-enabled chat."""
 
 from pathlib import Path
 
-from google import genai
-from google.genai import types
-
-from config import GEMINI_API_KEY
+from ai_client import image_content, vision_chat
+from config import AZURE_OPENAI_VISION_DEPLOYMENT
 from proto import resolve_cache
 from proto.retriever import retrieve
 
-client = genai.Client(api_key=GEMINI_API_KEY)
-
-ANSWER_MODEL = "gemini-3-flash-preview"
-DEEP_MODEL = "gemini-3-pro-preview"
+ANSWER_MODEL = AZURE_OPENAI_VISION_DEPLOYMENT
+DEEP_MODEL = AZURE_OPENAI_VISION_DEPLOYMENT
 
 SYSTEM_PROMPT = """\
 You are a service assistant for Gramag Grafische Maschinen AG technicians.
@@ -52,12 +48,11 @@ def _build_evidence_parts(hits: list[dict], max_images: int = 6) -> tuple[list, 
         if label == "ManualSection":
             cite = f"[{i}] {machine} / {doc} / page {h.get('page')}"
             text_block = f"=== EVIDENCE {cite} ===\nTEXT EXTRACT:\n{h.get('text') or '(no extractable text)'}\n\nVISION ANALYSIS:\n{h.get('vision_desc') or ''}"
-            parts.append(types.Part(text=text_block))
+            parts.append({"type": "text", "text": text_block})
             png = resolve_cache(h.get("png_path") or "")
             if png and img_count < max_images and Path(png).exists():
-                parts.append(types.Part(text=f"(image for [{i}] — page {h.get('page')} of {doc})"))
-                with open(png, "rb") as f:
-                    parts.append(types.Part.from_bytes(data=f.read(), mime_type="image/png"))
+                parts.append({"type": "text", "text": f"(image for [{i}] — page {h.get('page')} of {doc})"})
+                parts.append(image_content(png, mime_type="image/png"))
                 img_count += 1
             citations.append({
                 "idx": i, "kind": "page", "machine": machine, "doc": doc,
@@ -67,14 +62,14 @@ def _build_evidence_parts(hits: list[dict], max_images: int = 6) -> tuple[list, 
         elif label == "ConfigFile":
             cite = f"[{i}] {machine} / config: {h.get('name')}"
             body = f"{cite}\nSUMMARY: {h.get('summary') or ''}\n\nCONTENT (truncated):\n{(h.get('content') or '')[:2000]}"
-            parts.append(types.Part(text=body))
+            parts.append({"type": "text", "text": body})
             citations.append({
                 "idx": i, "kind": "config", "machine": machine, "doc": doc,
                 "name": h.get("name"), "score": h.get("score"),
             })
         elif label == "ImageAsset":
             cite = f"[{i}] {machine} / image: {h.get('name')}"
-            parts.append(types.Part(text=f"{cite}\nCAPTION: {h.get('caption') or ''}"))
+            parts.append({"type": "text", "text": f"{cite}\nCAPTION: {h.get('caption') or ''}"})
             citations.append({
                 "idx": i, "kind": "image", "machine": machine, "doc": doc,
                 "name": h.get("name"), "score": h.get("score"),
@@ -93,20 +88,16 @@ def answer(query: str, *, machine_slug: str | None = None, top_k: int = 6,
 
     evidence_parts, citations = _build_evidence_parts(hits)
     user_parts = [
-        types.Part(text=SYSTEM_PROMPT),
-        types.Part(text=f"\n\nQUESTION: {query}\n\nEVIDENCE:\n"),
+        {"type": "text", "text": SYSTEM_PROMPT},
+        {"type": "text", "text": f"\n\nQUESTION: {query}\n\nEVIDENCE:\n"},
         *evidence_parts,
-        types.Part(text="\n\nAnswer now, citing sources as [n] inline."),
+        {"type": "text", "text": "\n\nAnswer now, citing sources as [n] inline."},
     ]
 
     model = DEEP_MODEL if deep else ANSWER_MODEL
-    resp = client.models.generate_content(
-        model=model,
-        contents=[types.Content(role="user", parts=user_parts)],
-        config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=2000),
-    )
+    answer_text = vision_chat(user_parts, deployment=model, temperature=0.1, max_tokens=2000)
     return {
-        "answer": resp.text or "",
+        "answer": answer_text or "",
         "citations": citations,
         "hits": [
             {k: v for k, v in h.items() if k not in ("merged",)}

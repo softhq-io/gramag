@@ -51,7 +51,7 @@ WORKDIR /app
 
 # App code — proto KB + ERP
 COPY proto/ ./proto/
-COPY proto_server.py config.py db.py db_helpers.py embeddings.py ./
+COPY proto_server.py config.py ai_client.py db.py db_helpers.py embeddings.py refresh_graph_embeddings.py ./
 COPY auth.py auth_router.py seed_users.py ./
 COPY erp_router.py retriever.py schema.py import_new_erp_subset.py ./
 COPY mission_router.py mission.py fleet_router.py fleet.py ./

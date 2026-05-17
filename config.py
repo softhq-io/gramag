@@ -5,12 +5,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Gemini
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-EMBED_MODEL = "gemini-embedding-001"
-EMBED_DIMENSIONS = 3072
-CHAT_MODEL = "gemini-3-pro-preview"
-EXTRACTION_MODEL = "gemini-2.0-flash"  # Fast model for PDF structured extraction
+# Azure OpenAI
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
+AZURE_OPENAI_CHAT_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "gramag-chat")
+AZURE_OPENAI_VISION_DEPLOYMENT = os.getenv("AZURE_OPENAI_VISION_DEPLOYMENT", "gramag-vision")
+AZURE_OPENAI_EMBED_DEPLOYMENT = os.getenv("AZURE_OPENAI_EMBED_DEPLOYMENT", "gramag-embed")
+EMBED_DIMENSIONS = int(os.getenv("EMBED_DIMENSIONS", 3072))
 
 # FalkorDB
 FALKORDB_HOST = os.getenv("FALKORDB_HOST", "localhost")

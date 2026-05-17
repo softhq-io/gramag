@@ -9,10 +9,10 @@ import json
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
+from ai_client import chat
 from auth import get_current_user
 from db import db
 from db_helpers import result_to_dicts, result_single
-from config import GEMINI_API_KEY, CHAT_MODEL
 
 router = APIRouter(prefix="/api/erp", tags=["erp"])
 
@@ -262,11 +262,6 @@ def _proto_kb_context(query: str, top_k: int = 6) -> list[dict]:
 @router.post("/ask")
 def ask(req: AskRequest, _user: dict = Depends(get_current_user)):
     """Hybrid Q&A: ERP graph traversal + proto KB vector search."""
-    from google import genai
-    from google.genai import types
-
-    client = genai.Client(api_key=GEMINI_API_KEY)
-
     erp_results = _erp_graph_context(req.query, req.machine_erp_id)
     kb_results = _proto_kb_context(req.query, top_k=6)
 
@@ -313,14 +308,10 @@ TECHNICAL MANUALS (supplier documentation):
 
 QUESTION: {req.query}"""
 
-    resp = client.models.generate_content(
-        model=CHAT_MODEL,
-        contents=[{"role": "user", "parts": [{"text": prompt}]}],
-        config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=2000),
-    )
+    answer = chat(prompt, temperature=0.2, max_tokens=2000)
 
     return {
-        "answer": resp.text,
+        "answer": answer,
         "sources": sources,
         "erp_results": len(erp_parts),
         "kb_results": len(kb_parts),

@@ -1,59 +1,20 @@
 """
-Compare text extraction (PyMuPDF) vs vision extraction (Gemini 3 Flash)
+Compare text extraction (PyMuPDF) vs Azure OpenAI vision extraction
 on pages with heavy visual content.
 
 Tests whether LLM vision can extract knowledge that text extraction misses.
 """
 
-import json
-import time
 from pathlib import Path
 
 import fitz
-from google import genai
-from google.genai import types
-
-from config import GEMINI_API_KEY
+from proto.vision import vision_extract_page
 
 PDF_PATH = Path("/Users/piotrzwolinski/Downloads/DPMOpgUE.pdf")
 CACHE_DIR = Path(__file__).parent / "test_embed_cache"
-GEN_MODEL = "gemini-3-flash-preview"
 
 # Pages with heavy visual content
 VISUAL_PAGES = [5, 6, 7, 9, 15, 19]
-
-client = genai.Client(api_key=GEMINI_API_KEY)
-
-EXTRACTION_PROMPT = """\
-You are a technical documentation analyst for industrial machines.
-
-Analyze this manual page image. Extract ALL knowledge visible on this page.
-
-IMPORTANT: Focus especially on information that is ONLY visible in the images/diagrams
-and would NOT be captured by copy-pasting the text from this page. For example:
-- Spatial positions of components ("RS232 port is third from top on the left side")
-- Physical appearance (color, shape, size relative to other parts)
-- How components connect to each other visually
-- Button icons and their layout
-- Warning symbol graphics
-- Assembly sequences shown in photos
-
-Structure your response as:
-
-## Components (from diagrams/photos)
-For each labeled component: [ref letter/number] Name — spatial position, visual description
-
-## Visual-only knowledge
-Facts that are ONLY visible in images, not written in text on this page.
-
-## Procedures shown visually
-Any step-by-step actions depicted in photos/diagrams.
-
-## Relationships
-How components connect, what is adjacent to what.
-
-Be thorough but concise. A service technician will use this to find parts on the real machine."""
-
 
 def extract_text(pdf_path: Path, page_num: int) -> str:
     doc = fitz.open(pdf_path)
@@ -63,23 +24,7 @@ def extract_text(pdf_path: Path, page_num: int) -> str:
 
 
 def extract_vision(img_path: str) -> str:
-    with open(img_path, "rb") as f:
-        img_bytes = f.read()
-
-    response = client.models.generate_content(
-        model=GEN_MODEL,
-        contents=[
-            types.Content(role="user", parts=[
-                types.Part.from_bytes(data=img_bytes, mime_type="image/png"),
-                types.Part(text=EXTRACTION_PROMPT),
-            ])
-        ],
-        config=types.GenerateContentConfig(
-            temperature=0.1,
-            max_output_tokens=3000,
-        ),
-    )
-    return response.text
+    return vision_extract_page(img_path)
 
 
 def main():

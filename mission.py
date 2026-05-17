@@ -5,15 +5,11 @@ Multi-hop graph reasoning + AI briefing generation for service technicians.
 
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from ai_client import chat, json_chat
 from db import db
 from db_helpers import result_to_dicts, result_single
 from retriever import graph_vector_search
 from embeddings import generate_query_embedding
-from config import GEMINI_API_KEY, CHAT_MODEL
-from google import genai
-from google.genai import types
-
-_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 # ── Search ───────────────────────────────────────────────────────────
@@ -184,22 +180,14 @@ def summarize_similar_cases(cases: list[dict], symptom: str = "") -> list[dict]:
         "Fasse jeden der folgenden Service-Fälle in GENAU einem Satz zusammen.\n"
         "Fokussiere auf: Was war das Problem? Was wurde gemacht/gelöst?\n"
         f"{('Aktuelles Symptom: ' + symptom + chr(10)) if symptom else ''}"
-        "Antworte als JSON-Array mit Strings, ein Eintrag pro Case.\n"
-        "Beispiel: [\"Riemen gerissen, ersetzt durch Teil 24046.\", \"Sensor defekt, kalibriert.\"]\n\n"
+        "Antworte als JSON-Objekt mit dem Feld summaries (Array mit Strings, ein Eintrag pro Case).\n"
+        "Beispiel: {\"summaries\":[\"Riemen gerissen, ersetzt durch Teil 24046.\", \"Sensor defekt, kalibriert.\"]}\n\n"
         + "\n\n".join(lines)
     )
 
     try:
-        resp = _client.models.generate_content(
-            model=CHAT_MODEL,
-            contents=[{"role": "user", "parts": [{"text": prompt}]}],
-            config=types.GenerateContentConfig(
-                temperature=0.2,
-                max_output_tokens=2000,
-                response_mime_type="application/json",
-            ),
-        )
-        summaries = json.loads(resp.text)
+        parsed = json.loads(json_chat(prompt, temperature=0.2, max_tokens=2000))
+        summaries = parsed.get("summaries", []) if isinstance(parsed, dict) else []
         for i, case in enumerate(cases):
             case["llm_summary"] = summaries[i] if i < len(summaries) else ""
     except Exception as e:
@@ -342,12 +330,7 @@ def summarize_parts_kit(kit: dict, machine: dict, symptom: str = "") -> str:
     )
 
     try:
-        resp = _client.models.generate_content(
-            model=CHAT_MODEL,
-            contents=[{"role": "user", "parts": [{"text": prompt}]}],
-            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=4000),
-        )
-        return resp.text.strip()
+        return chat(prompt, temperature=0.2, max_tokens=4000).strip()
     except Exception as e:
         print(f"[WARN] summarize_parts_kit failed: {e}")
         return ""
@@ -563,7 +546,7 @@ def _build_briefing_context(
     manuals: list[dict],
     symptom: str,
 ) -> str:
-    """Build the context string for the Gemini briefing prompt."""
+    """Build the context string for the service briefing prompt."""
     lines = []
     lines.append(f"MACHINE: {machine.get('title', '?')}")
     lines.append(f"Customer: {machine.get('customer', '?')} ({machine.get('city', '?')})")
@@ -606,7 +589,7 @@ def _build_briefing_context(
 
 
 def _generate_summary(context: str) -> str:
-    """Call Gemini to produce a concise service briefing."""
+    """Call Azure OpenAI to produce a concise service briefing."""
     prompt = f"""Du bist ein Service-Briefing-Assistent für Gramag Grafische Maschinen AG (Schweiz).
 Erstelle ein prägnantes Einsatz-Briefing für den Servicetechniker basierend auf den folgenden Daten.
 
@@ -627,11 +610,6 @@ DATEN:
 {context}"""
 
     try:
-        resp = _client.models.generate_content(
-            model=CHAT_MODEL,
-            contents=[{"role": "user", "parts": [{"text": prompt}]}],
-            config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=4000),
-        )
-        return resp.text
+        return chat(prompt, temperature=0.3, max_tokens=4000)
     except Exception as e:
         return f"Briefing-Generierung fehlgeschlagen: {e}"

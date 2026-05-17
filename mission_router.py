@@ -3,15 +3,11 @@
 import json
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from google import genai
-from google.genai import types
-from config import GEMINI_API_KEY, CHAT_MODEL
+from ai_client import chat
 from auth import get_current_user
 import mission
 
 router = APIRouter(prefix="/api/mission", tags=["mission"])
-
-_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 class BriefingRequest(BaseModel):
@@ -140,10 +136,6 @@ DETECTED INTENT: {json.dumps(intent)}
 
 QUESTION: {req.query}"""
 
-    resp = _client.models.generate_content(
-        model=CHAT_MODEL,
-        contents=[{"role": "user", "parts": [{"text": prompt}]}],
-        config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=2000),
-    )
+    answer = chat(prompt, temperature=0.2, max_tokens=2000)
 
-    return {"answer": resp.text, "sources": sources}
+    return {"answer": answer, "sources": sources}

@@ -5,7 +5,7 @@ This directory contains a FalkorDB dump with the full knowledge graph.
 ## Contents
 
 - `dump.rdb` — Redis/FalkorDB dump containing all graphs (`gramag`, `gramag_proto`)
-- `../index/` — Precomputed Gemini embeddings (3072-dim, float32) + metadata
+- `../index/` — Precomputed Azure OpenAI embeddings (3072-dim, float32) + metadata
 
 ## Restoring the graph
 

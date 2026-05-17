@@ -2,7 +2,7 @@
 
 Knowledge assistant for **Gramag Grafische Maschinen AG** — a Swiss company servicing industrial printing & finishing machines (MBO, Heidelberg, Müller Martini, etc.).
 
-Combines a 5-layer knowledge graph (ERP data, service history, PDF manuals, co-occurrence mining) with Gemini embeddings for hybrid retrieval. Technicians ask questions in natural language and get answers grounded in machine-specific service history, spare parts, and manual references.
+Combines a 5-layer knowledge graph (ERP data, service history, PDF manuals, co-occurrence mining) with Azure OpenAI embeddings for hybrid retrieval. Technicians ask questions in natural language and get answers grounded in machine-specific service history, spare parts, and manual references.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ Combines a 5-layer knowledge graph (ERP data, service history, PDF manuals, co-o
                      └──────┬───────┘
                             │
                      ┌──────▼───────┐
-                     │  Gemini API   │
+                     │ Azure OpenAI  │
                      │  embeddings   │
                      │  + chat       │
                      └──────────────┘
@@ -46,13 +46,13 @@ pip install -r requirements.txt
 
 # 4. Configure
 cp .env.example .env
-# Edit .env — add your GEMINI_API_KEY
+# Edit .env — add AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY
 
 # 5. Run
-uvicorn server:app --port 8000
+python -m uvicorn proto_server:app --port 8000
 ```
 
-The precomputed embeddings are in `index/` (tracked via Git LFS). The vector search works out of the box after restoring the graph.
+The precomputed embeddings are in `index/` (tracked via Git LFS). After changing embedding providers or deployments, rebuild them with `python rebuild_embeddings.py` and refresh FalkorDB vectors with `python refresh_graph_embeddings.py`.
 
 ## API
 
@@ -95,5 +95,5 @@ See [DEPLOY.md](DEPLOY.md) for the proto KB deployment guide.
 
 - **Python 3.14** / FastAPI / uvicorn
 - **FalkorDB** (Redis-based graph database)
-- **Gemini** (embeddings: gemini-embedding-001, chat: gemini-3-pro-preview)
+- **Azure OpenAI** (default deployments: gpt-5-mini, gpt-5-chat, text-embedding-3-large)
 - **Vite + TypeScript + React** (frontend)

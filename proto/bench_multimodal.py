@@ -14,10 +14,9 @@ import json
 import time
 from pathlib import Path
 
-from google.genai import types
-
-from proto import PROTO_CACHE_DIR
-from proto.answer import ANSWER_MODEL, SYSTEM_PROMPT, client
+from ai_client import image_content, vision_chat
+from proto import PROTO_CACHE_DIR, resolve_cache
+from proto.answer import ANSWER_MODEL, SYSTEM_PROMPT
 from proto.retriever import retrieve
 
 OUT_JSON = Path(PROTO_CACHE_DIR) / "bench_multimodal.json"
@@ -100,12 +99,12 @@ def build_evidence(hits, *, include_vision: bool, include_images: bool):
                 f"TEXT EXTRACT:\n{h.get('text') or '(no extractable text)'}"
                 f"{vision_block}"
             )
-            parts.append(types.Part(text=text_block))
+            parts.append({"type": "text", "text": text_block})
             png = h.get("png_path")
-            if include_images and png and img_count < max_images and Path(png).exists():
-                parts.append(types.Part(text=f"(image for [{i}] — page {h.get('page')} of {doc})"))
-                with open(png, "rb") as f:
-                    parts.append(types.Part.from_bytes(data=f.read(), mime_type="image/png"))
+            abs_png = resolve_cache(png or "")
+            if include_images and abs_png and img_count < max_images and Path(abs_png).exists():
+                parts.append({"type": "text", "text": f"(image for [{i}] — page {h.get('page')} of {doc})"})
+                parts.append(image_content(abs_png, mime_type="image/png"))
                 img_count += 1
             citations.append({"idx": i, "kind": "page", "machine": machine,
                               "doc": doc, "page": h.get("page")})
@@ -115,10 +114,10 @@ def build_evidence(hits, *, include_vision: bool, include_images: bool):
             if not include_vision:
                 # Strip the LLM-generated summary in text-only mode (it's "vision-like" enrichment)
                 summary = ""
-            parts.append(types.Part(text=(
+            parts.append({"type": "text", "text": (
                 f"{cite}\nSUMMARY: {summary}\n\n"
                 f"CONTENT (truncated):\n{(h.get('content') or '')[:2000]}"
-            )))
+            )})
             citations.append({"idx": i, "kind": "config", "machine": machine,
                               "doc": doc, "name": h.get("name")})
         elif label == "ImageAsset":
@@ -126,7 +125,7 @@ def build_evidence(hits, *, include_vision: bool, include_images: bool):
             caption = h.get("caption") or ""
             if not include_vision:
                 caption = "(image present, content not analyzed)"
-            parts.append(types.Part(text=f"{cite}\nCAPTION: {caption}"))
+            parts.append({"type": "text", "text": f"{cite}\nCAPTION: {caption}"})
             citations.append({"idx": i, "kind": "image", "machine": machine,
                               "doc": doc, "name": h.get("name")})
     return parts, citations
@@ -135,17 +134,12 @@ def build_evidence(hits, *, include_vision: bool, include_images: bool):
 def ask(query: str, hits: list, *, include_vision: bool, include_images: bool) -> str:
     evidence, _ = build_evidence(hits, include_vision=include_vision, include_images=include_images)
     user_parts = [
-        types.Part(text=SYSTEM_PROMPT),
-        types.Part(text=f"\n\nQUESTION: {query}\n\nEVIDENCE:\n"),
+        {"type": "text", "text": SYSTEM_PROMPT},
+        {"type": "text", "text": f"\n\nQUESTION: {query}\n\nEVIDENCE:\n"},
         *evidence,
-        types.Part(text="\n\nAnswer now, citing sources as [n] inline."),
+        {"type": "text", "text": "\n\nAnswer now, citing sources as [n] inline."},
     ]
-    resp = client.models.generate_content(
-        model=ANSWER_MODEL,
-        contents=[types.Content(role="user", parts=user_parts)],
-        config=types.GenerateContentConfig(temperature=0.1, max_output_tokens=2000),
-    )
-    return resp.text or ""
+    return vision_chat(user_parts, deployment=ANSWER_MODEL, temperature=0.1, max_tokens=2000)
 
 
 def metrics(answer: str, citations: list) -> dict:
