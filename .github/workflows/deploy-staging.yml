@@ -1,0 +1,84 @@
+name: Deploy — Staging
+
+on:
+  push:
+    branches: [staging]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ACR_LOGIN_SERVER: gramag72fsz9.azurecr.io
+  IMAGE: gramag72fsz9.azurecr.io/gramag
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout gramag
+        uses: actions/checkout@v4
+
+      - name: Frontend lint
+        working-directory: web
+        run: |
+          npm ci
+          npm run lint
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR
+        run: |
+          TOKEN=$(az acr login --name gramag72fsz9 --expose-token --output tsv --query accessToken)
+          echo "$TOKEN" | docker login ${{ env.ACR_LOGIN_SERVER }} --username 00000000-0000-0000-0000-000000000000 --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.azure
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:cache-staging
+          cache-to: type=registry,ref=${{ env.IMAGE }}:cache-staging,mode=max
+
+      - name: Checkout gramag-infra
+        uses: actions/checkout@v4
+        with:
+          repository: softhq-io/gramag-infra
+          token: ${{ secrets.INFRA_REPO_PAT }}
+          path: gramag-infra
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: tofu init
+        working-directory: gramag-infra/staging
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: tofu init
+
+      - name: tofu apply
+        working-directory: gramag-infra/staging
+        env:
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET_STAGING }}
+        run: tofu apply -auto-approve -var "image_tag=${{ github.sha }}"
