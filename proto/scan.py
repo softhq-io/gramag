@@ -11,6 +11,8 @@ from pathlib import Path
 
 from proto import PROTO_MANIFEST_PATH, PROTO_ROOT
 
+PROTO_ROOT_MODE = os.getenv("PROTO_ROOT_MODE", "machines")
+
 PDF_EXT = {".pdf"}
 IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".pcx"}
 TXT_EXT = {".txt"}
@@ -98,9 +100,12 @@ def walk_machine(machine_dir: Path) -> dict:
                 continue
             p = Path(root) / name
             try:
-                size = p.stat().st_size
+                stat = p.stat()
+                size = stat.st_size
+                mtime = int(stat.st_mtime)
             except OSError:
                 size = 0
+                mtime = 0
             total_size += size
             kind = classify(p)
             rel = p.relative_to(machine_dir)
@@ -113,6 +118,7 @@ def walk_machine(machine_dir: Path) -> dict:
                 "rel": str(rel),
                 "category": category,
                 "size": size,
+                "mtime": mtime,
                 "name": name,
             })
 
@@ -124,22 +130,60 @@ def walk_machine(machine_dir: Path) -> dict:
     }
 
 
-def build_manifest(root: str = PROTO_ROOT) -> dict:
-    root_path = Path(root)
+def has_ingestible_content(walk: dict) -> bool:
+    counts = walk["counts"]
+    return counts["pdf"] + counts["image"] + counts["text"] > 0
+
+
+def machine_entry(machine_dir: Path, root_path: Path, customer: str | None = None) -> dict | None:
+    parsed = parse_machine_name(machine_dir.name)
+    walk = walk_machine(machine_dir)
+    if not has_ingestible_content(walk):
+        return None
+    rel_path = machine_dir.relative_to(root_path)
+    return {
+        "folder": machine_dir.name,
+        "customer": customer,
+        "customer_folder": customer,
+        "path": str(machine_dir),
+        "rel_path": str(rel_path),
+        "slug": re.sub(r"[^a-zA-Z0-9]+", "-", str(rel_path)).strip("-").lower(),
+        **parsed,
+        **walk,
+    }
+
+
+def iter_machine_entries(root_path: Path, root_mode: str, customer_name: str | None = None) -> list[dict]:
     machines = []
+    if root_mode not in {"machines", "customers"}:
+        raise ValueError("root_mode must be 'machines' or 'customers'")
 
     for entry in sorted(root_path.iterdir()):
         if not entry.is_dir() or entry.name.startswith("."):
             continue
-        parsed = parse_machine_name(entry.name)
-        walk = walk_machine(entry)
-        machines.append({
-            "folder": entry.name,
-            "path": str(entry),
-            "slug": re.sub(r"[^a-zA-Z0-9]+", "-", entry.name).strip("-").lower(),
-            **parsed,
-            **walk,
-        })
+        if root_mode == "machines":
+            machine = machine_entry(entry, root_path, customer=customer_name)
+            if machine:
+                machines.append(machine)
+            continue
+
+        customer = entry.name
+        for machine_dir in sorted(entry.iterdir()):
+            if not machine_dir.is_dir() or machine_dir.name.startswith("."):
+                continue
+            machine = machine_entry(machine_dir, root_path, customer=customer)
+            if machine:
+                machines.append(machine)
+    return machines
+
+
+def build_manifest(
+    root: str = PROTO_ROOT,
+    root_mode: str = PROTO_ROOT_MODE,
+    customer_name: str | None = None,
+) -> dict:
+    root_path = Path(root)
+    machines = iter_machine_entries(root_path, root_mode, customer_name=customer_name)
 
     # Top-level files (not inside a machine folder)
     top_level = []
@@ -166,6 +210,8 @@ def build_manifest(root: str = PROTO_ROOT) -> dict:
 
     return {
         "root": root,
+        "root_mode": root_mode,
+        "customer_name": customer_name,
         "summary": summary,
         "machines": machines,
         "top_level_files": top_level,
@@ -173,12 +219,22 @@ def build_manifest(root: str = PROTO_ROOT) -> dict:
 
 
 def main():
-    manifest = build_manifest()
-    with open(PROTO_MANIFEST_PATH, "w") as f:
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default=PROTO_ROOT)
+    ap.add_argument("--manifest-path", default=PROTO_MANIFEST_PATH)
+    ap.add_argument("--root-mode", choices=["machines", "customers"], default=PROTO_ROOT_MODE)
+    ap.add_argument("--customer-name", default=os.getenv("PROTO_CUSTOMER_NAME"))
+    args = ap.parse_args()
+
+    manifest = build_manifest(args.root, root_mode=args.root_mode, customer_name=args.customer_name)
+    with open(args.manifest_path, "w") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
     s = manifest["summary"]
     print(f"Machines:   {s['machine_count']}")
+    print(f"Root mode:  {manifest['root_mode']}")
     print(f"PDFs:       {s['total_pdfs']}")
     print(f"Images:     {s['total_images']}")
     print(f"Text files: {s['total_texts']}")
@@ -194,7 +250,7 @@ def main():
               f"office={c['office']} cad={c['cad']} web={c['web']} "
               f"other={c['other']} skip={c['skip']} size={m['total_size']/1e6:.1f}MB")
     print()
-    print(f"Manifest -> {PROTO_MANIFEST_PATH}")
+    print(f"Manifest -> {args.manifest_path}")
 
 
 if __name__ == "__main__":

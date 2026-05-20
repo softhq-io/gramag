@@ -6,6 +6,7 @@ export interface ProtoMachine {
   type: string | null
   model: string | null
   serial: string | null
+  customer?: string | null
   docs: number
   pdfs: number
   imgs: number

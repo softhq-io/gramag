@@ -52,19 +52,77 @@ def _load_manifest() -> dict:
     return json.loads(Path(PROTO_MANIFEST_PATH).read_text())
 
 
+def _source_fingerprint(f: dict) -> str:
+    """Fingerprint source content enough to notice SharePoint refreshes."""
+    size = f.get("size")
+    mtime = f.get("mtime")
+    if size is None or mtime is None:
+        from proto import resolve_source
+        try:
+            stat = Path(resolve_source(f["path"])).stat()
+            size = stat.st_size
+            mtime = int(stat.st_mtime)
+        except OSError:
+            size = size or 0
+            mtime = mtime or 0
+    return f"{f.get('rel', f.get('path', ''))}|{size}|{int(mtime or 0)}"
+
+
+def _checkpoint_done(done: dict, key: str, f: dict, *, force: bool = False) -> bool:
+    if force:
+        return False
+    entry = done.get(key)
+    if not entry:
+        return False
+    fingerprint = _source_fingerprint(f)
+    if not entry.get("fingerprint"):
+        entry["fingerprint"] = fingerprint
+        return True
+    return entry.get("fingerprint") == fingerprint
+
+
+def clear_document_payload(doc_id: str):
+    """Remove generated child nodes before reprocessing an updated document."""
+    for rel, label in (
+        ("HAS_SECTION", "ManualSection"),
+        ("HAS_CONFIG", "ConfigFile"),
+        ("HAS_IMAGE", "ImageAsset"),
+    ):
+        proto_db.write(
+            f"""
+            MATCH (d:Document {{id: $doc_id}})-[r:{rel}]->(n:{label})
+            DELETE r, n
+            """,
+            {"doc_id": doc_id},
+        )
+
+
 def upsert_machine(m: dict) -> str:
     proto_db.write(
         """
         MERGE (n:Machine {slug: $slug})
         SET n.folder = $folder, n.type = $type, n.model = $model,
-            n.serial = $serial, n.raw = $raw, n.path = $path
+            n.serial = $serial, n.raw = $raw, n.path = $path,
+            n.rel_path = $rel_path, n.customer = $customer
         """,
         {
             "slug": m["slug"], "folder": m["folder"], "type": m["type"],
             "model": m.get("model"), "serial": m.get("serial"),
             "raw": m["raw"], "path": m["path"],
+            "rel_path": m.get("rel_path"), "customer": m.get("customer"),
         },
     )
+    if m.get("customer"):
+        customer_id = _id(m["customer"])
+        proto_db.write(
+            """
+            MATCH (m:Machine {slug: $slug})
+            MERGE (c:Customer {id: $customer_id})
+            SET c.name = $customer
+            MERGE (c)-[:HAS_MACHINE]->(m)
+            """,
+            {"slug": m["slug"], "customer_id": customer_id, "customer": m["customer"]},
+        )
     return m["slug"]
 
 
@@ -114,9 +172,8 @@ def render_pdf_pages(pdf_path: Path, doc_id: str) -> list[dict]:
         rel = Path("pages") / doc_id / f"p{i:04d}.png"
         abs_path = Path(PROTO_CACHE_DIR) / rel
         abs_path.parent.mkdir(parents=True, exist_ok=True)
-        if not abs_path.exists():
-            pix = page.get_pixmap(dpi=RENDER_DPI)
-            pix.save(abs_path)
+        pix = page.get_pixmap(dpi=RENDER_DPI)
+        pix.save(abs_path)
         text = page.get_text().strip()
         out.append({"page": i, "text": text, "png_path": str(rel)})
     doc.close()
@@ -146,6 +203,7 @@ def ingest_pdf(machine_slug: str, cat_id: str, f: dict, *, deep: bool = False,
     except Exception as e:
         print(f"      ! render fail: {e}")
         return 0
+    clear_document_payload(doc_id)
 
     vision_map: dict[int, str] = {}
     if workers > 1 and len(pages) > 1:
@@ -223,6 +281,7 @@ def ingest_text_config(machine_slug: str, cat_id: str, f: dict) -> int:
     merged = f"FILE: {f['name']}\n\nSUMMARY:\n{summary}\n\nCONTENT:\n{content[:4000]}"
     emb = generate_embedding(merged)
     cfg_id = _id(doc_id, "config")
+    clear_document_payload(doc_id)
     proto_db.write(
         """
         MATCH (d:Document {id: $doc_id})
@@ -251,6 +310,7 @@ def ingest_image_asset(machine_slug: str, cat_id: str, f: dict, *, deep: bool = 
     merged = f"IMAGE: {f['name']} (category: {f['category']})\n\n{caption}"
     emb = generate_embedding(merged)
     img_id = _id(doc_id, "image")
+    clear_document_payload(doc_id)
     proto_db.write(
         """
         MATCH (d:Document {id: $doc_id})
@@ -271,7 +331,8 @@ def ingest_image_asset(machine_slug: str, cat_id: str, f: dict, *, deep: bool = 
 
 def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
                    max_pdfs: int | None = None, max_images: int | None = None,
-                   workers: int = 8, img_workers: int = 8):
+                   workers: int = 8, img_workers: int = 8,
+                   force: bool = False):
     slug = m["slug"]
     print(f"\n=== {m['folder']} ===")
     upsert_machine(m)
@@ -290,19 +351,28 @@ def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
     print(f"  PDFs: {len(pdfs)}")
     for i, f in enumerate(pdfs, start=1):
         key = f"pdf::{f['rel']}"
-        if done.get(key):
+        if _checkpoint_done(done, key, f, force=force):
             continue
         print(f"    [{i}/{len(pdfs)}] {f['name']}")
         cat_id = categories.get(f["category"]) or upsert_category(slug, f["category"])
         t0 = time.time()
         try:
             n = ingest_pdf(slug, cat_id, f, deep=deep, workers=workers)
-            done[key] = {"sections": n, "ts": time.time()}
+            done[key] = {
+                "sections": n,
+                "ts": time.time(),
+                "fingerprint": _source_fingerprint(f),
+            }
             _save_checkpoint(cp)
             print(f"      -> {n} sections in {time.time() - t0:.1f}s")
         except Exception as e:
             print(f"      ! pdf failed: {str(e)[:150]}")
-            done[key] = {"sections": 0, "ts": time.time(), "err": str(e)[:200]}
+            done[key] = {
+                "sections": 0,
+                "ts": time.time(),
+                "fingerprint": _source_fingerprint(f),
+                "err": str(e)[:200],
+            }
             _save_checkpoint(cp)
 
     # Text configs
@@ -310,13 +380,13 @@ def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
     print(f"  Configs: {len(texts)}")
     for i, f in enumerate(texts, start=1):
         key = f"txt::{f['rel']}"
-        if done.get(key):
+        if _checkpoint_done(done, key, f, force=force):
             continue
         print(f"    [{i}/{len(texts)}] {f['name']}")
         cat_id = categories.get(f["category"]) or upsert_category(slug, f["category"])
         try:
             n = ingest_text_config(slug, cat_id, f)
-            done[key] = {"ok": n, "ts": time.time()}
+            done[key] = {"ok": n, "ts": time.time(), "fingerprint": _source_fingerprint(f)}
             _save_checkpoint(cp)
         except Exception as e:
             print(f"      ! {e}")
@@ -326,7 +396,11 @@ def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
     if max_images is not None:
         imgs = imgs[:max_images]
     print(f"  Images: {len(imgs)}")
-    pending = [(i, f) for i, f in enumerate(imgs, start=1) if not done.get(f"img::{f['rel']}")]
+    pending = [
+        (i, f)
+        for i, f in enumerate(imgs, start=1)
+        if not _checkpoint_done(done, f"img::{f['rel']}", f, force=force)
+    ]
     if pending:
         def _do_img(i, f):
             cat = categories.get(f["category"]) or upsert_category(slug, f["category"])
@@ -346,8 +420,15 @@ def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
                     print(f"    [{i}/{len(imgs)}] {f['name']}  ! {err}")
                 else:
                     print(f"    [{i}/{len(imgs)}] {f['name']}  ok")
-                done[key] = {"ok": n, "ts": time.time(), **({"err": err} if err else {})}
+                done[key] = {
+                    "ok": n,
+                    "ts": time.time(),
+                    "fingerprint": _source_fingerprint(f),
+                    **({"err": err} if err else {}),
+                }
                 _save_checkpoint(cp)
+
+    _save_checkpoint(cp)
 
 
 def main():
@@ -360,6 +441,7 @@ def main():
     ap.add_argument("--workers", type=int, default=32, help="Parallel vision calls per PDF")
     ap.add_argument("--img-workers", type=int, default=24, help="Parallel image captions")
     ap.add_argument("--machine-workers", type=int, default=1, help="Parallel machines")
+    ap.add_argument("--force", action="store_true", help="Reprocess files even when checkpoint fingerprints match")
     args = ap.parse_args()
 
     manifest = _load_manifest()
@@ -381,6 +463,7 @@ def main():
                     ingest_machine, m, cp, deep=args.deep,
                     max_pdfs=args.max_pdfs, max_images=args.max_images,
                     workers=args.workers, img_workers=args.img_workers,
+                    force=args.force,
                 )
                 for m in targets
             ]
@@ -393,7 +476,8 @@ def main():
         for m in targets:
             ingest_machine(m, cp, deep=args.deep,
                            max_pdfs=args.max_pdfs, max_images=args.max_images,
-                           workers=args.workers, img_workers=args.img_workers)
+                           workers=args.workers, img_workers=args.img_workers,
+                           force=args.force)
 
     print("\nDone.")
     print("Stats:")

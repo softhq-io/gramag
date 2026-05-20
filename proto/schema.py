@@ -24,7 +24,10 @@ def apply_indexes():
 
     print("Range indexes...")
     range_indexes = [
+        ("Customer", "id"),
+        ("Customer", "name"),
         ("Machine", "slug"),
+        ("Machine", "customer"),
         ("Machine", "type"),
         ("Machine", "model"),
         ("Machine", "serial"),
@@ -48,6 +51,7 @@ def apply_indexes():
 
     print("\nFulltext indexes...")
     fulltext = [
+        ("Customer", ["name"]),
         ("Machine", ["folder", "type", "model", "serial"]),
         ("Document", ["name", "rel_path"]),
         ("ManualSection", ["text", "vision_desc", "merged"]),

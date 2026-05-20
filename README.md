@@ -77,6 +77,84 @@ python seed_pdfs.py        # L3: PDF manual sections + embeddings
 python mining.py           # L4: co-occurrence mining
 ```
 
+## Proto SharePoint Sync
+
+Proto KB can mirror a SharePoint document library or folder into `PROTO_ROOT`,
+rebuild `PROTO_MANIFEST_PATH`, then let the normal Proto ingest process handle
+new and changed files.
+
+Required app-only Graph credentials:
+
+```bash
+export SHAREPOINT_TENANT_ID="..."
+export SHAREPOINT_CLIENT_ID="..."
+export SHAREPOINT_CLIENT_SECRET="..."
+```
+
+Also provide either a site ID, or the hostname plus site path:
+
+```bash
+export SHAREPOINT_SITE_HOSTNAME="contoso.sharepoint.com"
+export SHAREPOINT_SITE_PATH="/sites/Engineering"
+export SHAREPOINT_DRIVE_NAME="Documents"        # optional if the default drive is correct
+export SHAREPOINT_ROOT_PATH="Machines"          # optional folder inside the library
+export PROTO_ROOT_MODE="machines"               # or "customers" when root contains customer folders
+```
+
+Or provide the SharePoint browser URL directly:
+
+```bash
+export SHAREPOINT_WEB_URL="https://contoso.sharepoint.com/sites/Engineering/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2FEngineering%2FShared%20Documents%2FMachines"
+```
+
+Mirror updates and rebuild the manifest:
+
+```bash
+python sharepoint_proto_sync.py
+```
+
+For the Services customer folder layout, use the parent customer folder and
+customer mode:
+
+```bash
+export SHAREPOINT_ROOT_PATH="Kundendienst/Kunden"
+export PROTO_ROOT_MODE="customers"
+python sharepoint_proto_sync.py --run-ingest --ingest-all
+```
+
+For a staging smoke test with one customer only, point at that customer folder
+and attach the customer name:
+
+```bash
+export SHAREPOINT_ROOT_PATH="Kundendienst/Kunden/Beorda Direktwerbung AG"
+export PROTO_ROOT_MODE="machines"
+export PROTO_CUSTOMER_NAME="Beorda Direktwerbung AG"
+python sharepoint_proto_sync.py --run-ingest --ingest-all
+```
+
+Azure staging is configured the same way via Terraform. Keep SharePoint
+credentials out of `terraform.tfvars` and provide them as sensitive variables:
+
+```bash
+export TF_VAR_sharepoint_tenant_id="..."
+export TF_VAR_sharepoint_client_id="..."
+export TF_VAR_sharepoint_client_secret="..."
+```
+
+The staging Container App Job runs daily from Graph delta state stored in
+`/data/cache/sharepoint_delta_state.json`; the first run populates the selected
+customer folder, later runs process only deltas.
+
+Mirror and immediately ingest all changed Proto sources:
+
+```bash
+python sharepoint_proto_sync.py --run-ingest --ingest-all
+```
+
+The sync stores the Microsoft Graph delta token in
+`$PROTO_CACHE_DIR/sharepoint_delta_state.json` by default. Use `--full` to
+ignore that token and rescan the selected library or folder.
+
 ## Frontend
 
 ```bash

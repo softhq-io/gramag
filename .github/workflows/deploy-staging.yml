@@ -91,4 +91,7 @@ jobs:
           TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET_STAGING }}
           TF_VAR_exxas_user: ${{ secrets.EXXAS_USER }}
           TF_VAR_exxas_password: ${{ secrets.EXXAS_PASSWORD }}
+          TF_VAR_sharepoint_tenant_id: ${{ secrets.SHAREPOINT_TENANT_ID }}
+          TF_VAR_sharepoint_client_id: ${{ secrets.SHAREPOINT_CLIENT_ID }}
+          TF_VAR_sharepoint_client_secret: ${{ secrets.SHAREPOINT_CLIENT_SECRET }}
         run: tofu apply -auto-approve -var "image_tag=${{ github.sha }}"

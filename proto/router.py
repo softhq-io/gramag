@@ -36,7 +36,7 @@ def machines():
 
 @router.get("/customer")
 def customer_overview():
-    """Static customer info + aggregated KB stats. Single-customer prototype."""
+    """Customer info + aggregated KB stats for the Proto graph."""
     from db_helpers import result_to_dicts
     from proto.db_proto import proto_db
 
@@ -87,10 +87,21 @@ def customer_overview():
         except Exception:
             m["sample_docs"] = []
 
+    customer_names = sorted({m.get("customer") for m in machines if m.get("customer")})
+    if len(customer_names) == 1:
+        customer_name = customer_names[0]
+        tagline = "Technische Dokumentation und Servicewissen"
+    elif len(customer_names) > 1:
+        customer_name = "Kundendienst Kunden"
+        tagline = f"{len(customer_names)} Kunden mit technischer Dokumentation"
+    else:
+        customer_name = "Proto Knowledge Base"
+        tagline = "Technische Dokumentation und Servicewissen"
+
     return {
         "customer": {
-            "name": "Beorda Direktwerbung AG",
-            "tagline": "Spezialist für personalisierte Direktwerbung",
+            "name": customer_name,
+            "tagline": tagline,
             "machine_count": len(machines),
         },
         "stats": {

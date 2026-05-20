@@ -1,0 +1,23 @@
+{
+  "run_id": "b9983fcf-ea21-4fed-ae34-ebb43e32087d",
+  "source": "exxas_daily",
+  "status": "failed",
+  "dry_run": true,
+  "watermark_before": "2026-04-22 16:40:43",
+  "watermark_query_since": "2026-04-20 16:40:43",
+  "api_calls": 217,
+  "counts": {
+    "machines_touched": 0,
+    "service_docs_touched": 0,
+    "comments_touched": 0,
+    "parts_rows_touched": 0,
+    "changed_docs_seen": 206,
+    "changed_comments_seen": 554,
+    "changed_machines_seen": 27,
+    "rejected_rows": 5,
+    "rejected_reasons": {
+      "service_doc_missing_machine": 5
+    }
+  },
+  "error": "The maximum possible number of billable api requests has been reached"
+}

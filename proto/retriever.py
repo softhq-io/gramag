@@ -297,10 +297,12 @@ def list_machines() -> list[dict]:
              sum(CASE WHEN d.kind = 'text' THEN 1 ELSE 0 END) AS txts
         OPTIONAL MATCH (m)-[:HAS_DOCUMENT]->(:Document)-[:HAS_SECTION]->(s:ManualSection)
         WITH m, docs, pdfs, imgs, txts, count(s) AS sections
+        OPTIONAL MATCH (c:Customer)-[:HAS_MACHINE]->(m)
         RETURN m.slug AS slug, m.folder AS folder, m.type AS type,
                m.model AS model, m.serial AS serial,
+               coalesce(c.name, m.customer) AS customer,
                docs, pdfs, imgs, txts, sections
-        ORDER BY folder
+        ORDER BY customer, folder
         """
     )
     return result_to_dicts(result)
