@@ -74,7 +74,7 @@ if [ -d "$ERP_CSV_DIR" ] && [ -f "$ERP_CSV_DIR/kunden.csv" ]; then
   echo "[entrypoint] seeding users (idempotent)..."
   python -c "from seed_users import seed; seed()" || true
 
-  if [ "$CURRENT_CSV_FINGERPRINT" != "$LAST_CSV_FINGERPRINT" ]; then
+  if [ "$CURRENT_CSV_FINGERPRINT" != "$LAST_CSV_FINGERPRINT" ] || [ "$EXISTING" = "0" ]; then
     echo "[entrypoint] importing CSV export from $ERP_CSV_DIR..."
     python -c "from schema import apply_indexes; apply_indexes()" || true
     python validate_erp_import.py --data-dir "$ERP_CSV_DIR"
