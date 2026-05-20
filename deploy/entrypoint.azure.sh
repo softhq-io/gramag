@@ -25,6 +25,10 @@ for i in range(60):
         time.sleep(2)
 PYEOF
 
+echo "[entrypoint] configuring FalkorDB persistence..."
+redis-cli -h "${FALKORDB_HOST:-falkordb}" -p "${FALKORDB_PORT:-6379}" CONFIG SET save "300 1" || true
+redis-cli -h "${FALKORDB_HOST:-falkordb}" -p "${FALKORDB_PORT:-6379}" CONFIG SET stop-writes-on-bgsave-error no || true
+
 # Seed ERP data (idempotent — skips if already populated)
 cd /app
 ERP_CSV_DIR=${ERP_CSV_DIR:-/data/erp}

@@ -6,7 +6,7 @@ services:
     volumes:
       - falkordb_data:/data
     environment:
-      - FALKORDB_ARGS=TIMEOUT 0
+      - FALKORDB_ARGS=TIMEOUT 0 save 300 1 stop-writes-on-bgsave-error no
     restart: unless-stopped
 
 volumes:
