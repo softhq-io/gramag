@@ -41,6 +41,10 @@ def apply_indexes():
         ("TroubleshootingEntry", "symptom"),
         ("Session", "id"),
         ("User", "username"),
+        ("SyncState", "name"),
+        ("SyncRun", "id"),
+        ("SyncRun", "source"),
+        ("SyncRun", "status"),
         # New labels from bulk CSV import
         ("Dokument", "erp_id"),
         ("Dokument", "typ"),

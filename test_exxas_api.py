@@ -3,8 +3,8 @@ import os, sys, json
 import requests
 
 BASE_URL = "https://api.exxas.net"
-USER = os.environ.get("EXXAS_USER", "zwolinskipiotr@gmail.com")
-PASSWORD = os.environ.get("EXXAS_PASSWORD", "xbuQX34R6T##")
+USER = os.environ.get("EXXAS_USER", "")
+PASSWORD = os.environ.get("EXXAS_PASSWORD", "")
 
 
 def login() -> dict:
@@ -102,6 +102,9 @@ def graphql_query(graphql_url: str, api_key: str, query: str) -> None:
 
 
 if __name__ == "__main__":
+    if not USER or not PASSWORD:
+        raise SystemExit("Set EXXAS_USER and EXXAS_PASSWORD before running this probe.")
+
     print(f"=== Exxas API test (user={USER}) ===\n")
     info = login()
     api_key = info["apiKey"]
