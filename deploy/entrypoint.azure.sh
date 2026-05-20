@@ -71,10 +71,12 @@ if [ -d "$ERP_CSV_DIR" ] && [ -f "$ERP_CSV_DIR/kunden.csv" ]; then
   CURRENT_CSV_FINGERPRINT=$(csv_fingerprint)
   LAST_CSV_FINGERPRINT=$(cat "$ERP_CSV_MARKER" 2>/dev/null || true)
 
+  echo "[entrypoint] seeding users (idempotent)..."
+  python -c "from seed_users import seed; seed()" || true
+
   if [ "$CURRENT_CSV_FINGERPRINT" != "$LAST_CSV_FINGERPRINT" ]; then
     echo "[entrypoint] importing CSV export from $ERP_CSV_DIR..."
     python -c "from schema import apply_indexes; apply_indexes()" || true
-    python -c "from seed_users import seed; seed()"
     python validate_erp_import.py --data-dir "$ERP_CSV_DIR"
     python seed_erp.py --data-dir "$ERP_CSV_DIR"
     printf "%s" "$CURRENT_CSV_FINGERPRINT" > "$ERP_CSV_MARKER"
@@ -95,7 +97,9 @@ elif [ "$EXISTING" = "0" ]; then
     echo "[entrypoint] no seed data found — starting empty"
   fi
 else
-  echo "[entrypoint] ERP graph already has $EXISTING machines — skipping seed"
+  echo "[entrypoint] ERP graph already has $EXISTING machines — skipping ERP seed"
+  echo "[entrypoint] seeding users (idempotent)..."
+  python -c "from seed_users import seed; seed()" || true
 fi
 
 echo "[entrypoint] starting uvicorn"

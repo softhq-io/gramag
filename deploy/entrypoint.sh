@@ -43,15 +43,15 @@ db.connect()
 print(db.node_count('Machine'))
 " 2>/dev/null || echo "0")
 
+  echo "[entrypoint] seeding users (idempotent)..."
+  python -c "from seed_users import seed; seed()" || true
+
   if [ "$EXISTING" = "0" ]; then
     echo "[entrypoint] seeding ERP schema + indexes..."
     python -c "from schema import apply_indexes; apply_indexes()" || true
 
     echo "[entrypoint] importing ERP demo subset..."
     python import_new_erp_subset.py --input "$ERP_SEED_FILE"
-
-    echo "[entrypoint] seeding users..."
-    python -c "from seed_users import seed; seed()"
   else
     echo "[entrypoint] ERP graph already has $EXISTING machines — skipping seed"
   fi
