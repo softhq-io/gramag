@@ -106,5 +106,20 @@ else
   python -c "from seed_users import seed; seed()" || true
 fi
 
+if [ -n "${EXXAS_INITIAL_WATERMARK:-}" ]; then
+  echo "[entrypoint] ensuring Exxas watermark (initial: $EXXAS_INITIAL_WATERMARK)..."
+  python -c "
+import os
+from db import db
+from exxas_daily_sync import initialize_watermark, get_state_watermark
+db.connect()
+if not get_state_watermark():
+    initialize_watermark(os.environ['EXXAS_INITIAL_WATERMARK'])
+    print('[entrypoint] Exxas watermark set to', os.environ['EXXAS_INITIAL_WATERMARK'])
+else:
+    print('[entrypoint] Exxas watermark already set — skipping')
+" || true
+fi
+
 echo "[entrypoint] starting uvicorn"
 exec python -m uvicorn proto_server:app --host 0.0.0.0 --port 8000
