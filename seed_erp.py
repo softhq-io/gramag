@@ -6,11 +6,26 @@ kommentare, adressen) and creates the L1 Inventory + L2.5 Service History layers
 All writes use MERGE for idempotent re-runs.
 """
 
+import argparse
 import csv
 import os
 import re
 import time
 from config import ERP_DIR, NOISE_KEYWORDS
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Seed ERP CSV exports into FalkorDB.")
+    p.add_argument(
+        "--data-dir",
+        default=ERP_DIR,
+        help="Directory containing ERP CSV exports (default: config.ERP_DIR)",
+    )
+    return p.parse_args()
+
+
+_args = parse_args()
+ERP_DIR = _args.data_dir
 
 
 def clean_html(text: str) -> str:
