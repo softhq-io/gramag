@@ -28,6 +28,12 @@ export interface FleetSummary {
 
 export interface FleetDashboard {
   summary: FleetSummary
+  pagination: {
+    limit: number
+    offset: number
+    returned: number
+    has_more: boolean
+  }
   machines: MachineRisk[]
 }
 
@@ -46,9 +52,21 @@ export interface FleetCustomer {
   machine_count: number
 }
 
-export function fetchFleetDashboard(customerId?: string) {
-  const qs = customerId ? `?customer_id=${encodeURIComponent(customerId)}` : ''
-  return get<FleetDashboard>(`/fleet/dashboard${qs}`)
+export interface FleetDashboardParams {
+  customerId?: string
+  limit?: number
+  offset?: number
+  q?: string
+}
+
+export function fetchFleetDashboard(params: FleetDashboardParams = {}) {
+  const qs = new URLSearchParams()
+  if (params.customerId) qs.set('customer_id', params.customerId)
+  if (params.limit) qs.set('limit', String(params.limit))
+  if (params.offset) qs.set('offset', String(params.offset))
+  if (params.q) qs.set('q', params.q)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  return get<FleetDashboard>(`/fleet/dashboard${suffix}`)
 }
 
 export function fetchFleetCustomers() {

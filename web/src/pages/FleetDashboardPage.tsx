@@ -9,12 +9,17 @@ import {
   type MachineRisk,
 } from '../api/fleet'
 
+const PAGE_SIZE = 100
+
 export function FleetDashboardPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [dashboard, setDashboard] = useState<FleetDashboard | null>(null)
   const [customers, setCustomers] = useState<FleetCustomer[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<string>('')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [offset, setOffset] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -23,13 +28,26 @@ export function FleetDashboardPage() {
   }, [])
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setOffset(0)
+      setDebouncedSearch(search.trim())
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
     setIsLoading(true)
     setError(null)
-    fetchFleetDashboard(selectedCustomer || undefined)
+    fetchFleetDashboard({
+      customerId: selectedCustomer || undefined,
+      limit: PAGE_SIZE,
+      offset,
+      q: debouncedSearch || undefined,
+    })
       .then(setDashboard)
       .catch(e => setError(e.message))
       .finally(() => setIsLoading(false))
-  }, [selectedCustomer])
+  }, [selectedCustomer, debouncedSearch, offset])
 
   if (isLoading) {
     return (
@@ -50,24 +68,37 @@ export function FleetDashboardPage() {
 
   if (!dashboard) return null
 
-  const { summary, machines } = dashboard
+  const { summary, machines, pagination } = dashboard
+  const rangeStart = summary.total === 0 ? 0 : pagination.offset + 1
+  const rangeEnd = pagination.offset + pagination.returned
 
   return (
     <div className="fleet-dashboard">
       <div className="fleet-header">
         <h1 className="fleet-title">{t('fleet.title')}</h1>
-        <select
-          className="fleet-customer-select"
-          value={selectedCustomer}
-          onChange={e => setSelectedCustomer(e.target.value)}
-        >
-          <option value="">{t('fleet.allCustomers')}</option>
-          {customers.map(c => (
-            <option key={c.erp_id} value={c.erp_id}>
-              {c.name} ({c.machine_count})
-            </option>
-          ))}
-        </select>
+        <div className="fleet-filters">
+          <input
+            className="fleet-search-input"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={t('fleet.search', 'Search machines')}
+          />
+          <select
+            className="fleet-customer-select"
+            value={selectedCustomer}
+            onChange={e => {
+              setOffset(0)
+              setSelectedCustomer(e.target.value)
+            }}
+          >
+            <option value="">{t('fleet.allCustomers')}</option>
+            {customers.map(c => (
+              <option key={c.erp_id} value={c.erp_id}>
+                {c.name} ({c.machine_count})
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="fleet-summary">
@@ -86,6 +117,30 @@ export function FleetDashboardPage() {
         <div className="fleet-summary-card fleet-summary-good">
           <div className="fleet-summary-value">{summary.good}</div>
           <div className="fleet-summary-label">{t('fleet.good')}</div>
+        </div>
+      </div>
+
+      <div className="fleet-pagination">
+        <span>
+          {rangeStart}-{rangeEnd} / {summary.total}
+        </span>
+        <div className="fleet-pagination-buttons">
+          <button
+            type="button"
+            className="fleet-page-button"
+            disabled={pagination.offset === 0 || isLoading}
+            onClick={() => setOffset(Math.max(0, pagination.offset - PAGE_SIZE))}
+          >
+            {t('fleet.previous', 'Previous')}
+          </button>
+          <button
+            type="button"
+            className="fleet-page-button"
+            disabled={!pagination.has_more || isLoading}
+            onClick={() => setOffset(pagination.offset + PAGE_SIZE)}
+          >
+            {t('fleet.next', 'Next')}
+          </button>
         </div>
       </div>
 

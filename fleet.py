@@ -295,38 +295,87 @@ def compute_risk_score(erp_id: str) -> dict:
 
 # ── Fleet Dashboard ───────────────────────────────────────────────────
 
-def get_fleet_dashboard(customer_id: str | None = None) -> dict:
+def get_fleet_dashboard(
+    customer_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    q: str | None = None,
+) -> dict:
     """Build fleet health dashboard with risk scores for all machines.
 
     Optionally filter by customer_id.
     """
+    search = (q or "").strip().lower()
+    params = {
+        "customer_id": customer_id,
+        "limit": limit,
+        "offset": offset,
+        "q": search,
+    }
+    search_clause = """
+        ($q = '' OR
+         toLower(coalesce(m.title, '')) CONTAINS $q OR
+         toLower(coalesce(m.erp_id, '')) CONTAINS $q OR
+         toLower(coalesce(m.serial_number, '')) CONTAINS $q OR
+         toLower(coalesce(c.name, '')) CONTAINS $q)
+    """
+
     if customer_id:
         machines_result = db.query("""
             MATCH (c:Customer {erp_id: $customer_id})-[:OWNS]->(m:Machine)
             OPTIONAL MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m)
             WITH m, c, count(sj) AS job_count
-            WHERE job_count > 0
+            WHERE job_count > 0 AND
+                  ($q = '' OR
+                   toLower(coalesce(m.title, '')) CONTAINS $q OR
+                   toLower(coalesce(m.erp_id, '')) CONTAINS $q OR
+                   toLower(coalesce(m.serial_number, '')) CONTAINS $q OR
+                   toLower(coalesce(c.name, '')) CONTAINS $q)
             RETURN m.erp_id AS erp_id, m.title AS name,
                    c.name AS customer, c.erp_id AS customer_id
             ORDER BY m.title
-        """, {"customer_id": customer_id})
+            SKIP $offset
+            LIMIT $limit
+        """, params)
+        count_result = db.query(f"""
+            MATCH (c:Customer {{erp_id: $customer_id}})-[:OWNS]->(m:Machine)
+            MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m)
+            WITH DISTINCT m, c
+            WHERE {search_clause}
+            RETURN count(DISTINCT m) AS total
+        """, params)
     else:
         machines_result = db.query("""
             MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m:Machine)
             OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
             WITH m, c, count(sj) AS job_count
-            WHERE job_count > 0
+            WHERE job_count > 0 AND
+                  ($q = '' OR
+                   toLower(coalesce(m.title, '')) CONTAINS $q OR
+                   toLower(coalesce(m.erp_id, '')) CONTAINS $q OR
+                   toLower(coalesce(m.serial_number, '')) CONTAINS $q OR
+                   toLower(coalesce(c.name, '')) CONTAINS $q)
             RETURN DISTINCT m.erp_id AS erp_id, m.title AS name,
                    c.name AS customer, c.erp_id AS customer_id
             ORDER BY m.title
-            LIMIT 200
-        """)
+            SKIP $offset
+            LIMIT $limit
+        """, params)
+        count_result = db.query(f"""
+            MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m:Machine)
+            OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
+            WITH DISTINCT m, c
+            WHERE {search_clause}
+            RETURN count(DISTINCT m) AS total
+        """, params)
 
     machines = result_to_dicts(machines_result)
+    total = result_value(count_result, "total", 0)
 
-    # Compute risk for each machine
+    # Compute risk for the current page only. Full-fleet risk distribution should
+    # be precomputed before we sort/filter by risk globally.
     results = []
-    summary = {"total": 0, "critical": 0, "warning": 0, "good": 0}
+    summary = {"total": total, "critical": 0, "warning": 0, "good": 0}
 
     for m in machines:
         erp_id = m["erp_id"]
@@ -342,16 +391,19 @@ def get_fleet_dashboard(customer_id: str | None = None) -> dict:
                 "last_service": risk["last_service"],
                 "next_predicted": risk["next_predicted"],
             })
-            summary["total"] += 1
             summary[risk["risk_level"]] += 1
         except Exception:
             # Skip machines with query errors
             continue
 
-    # Sort by risk score descending
-    results.sort(key=lambda r: r["risk_score"], reverse=True)
+    pagination = {
+        "limit": limit,
+        "offset": offset,
+        "returned": len(results),
+        "has_more": offset + len(results) < total,
+    }
 
-    return {"summary": summary, "machines": results}
+    return {"summary": summary, "pagination": pagination, "machines": results}
 
 
 def get_customers_list() -> list[dict]:
