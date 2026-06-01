@@ -132,6 +132,51 @@ class SharePointProtoSyncTests(unittest.TestCase):
             self.assertTrue((Path(tmp) / "Machine A/a.pdf").exists())
             self.assertFalse((Path(tmp) / "Machine A/b.pdf").exists())
 
+    def test_mirror_delta_respects_include_paths(self):
+        graph = FakeGraph()
+        graph.json["/drives/drive/root/delta"] = {
+            "value": [
+                {
+                    "id": "item1",
+                    "name": "a.pdf",
+                    "file": {"mimeType": "application/pdf"},
+                    "size": 1,
+                    "eTag": "v1",
+                    "parentReference": {"path": "/drives/drive/root:/Kunden/Included/Machine A"},
+                },
+                {
+                    "id": "item2",
+                    "name": "b.pdf",
+                    "file": {"mimeType": "application/pdf"},
+                    "size": 1,
+                    "eTag": "v1",
+                    "parentReference": {"path": "/drives/drive/root:/Kunden/Other/Machine B"},
+                },
+            ],
+            "@odata.deltaLink": "https://delta.example/next",
+        }
+        graph.bytes["/drives/drive/items/item1/content"] = b"a"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state = sync.SyncState()
+            counts = sync.mirror_delta(
+                graph,
+                "drive",
+                None,
+                "Kunden",
+                state,
+                Path(tmp),
+                {".pdf"},
+                full=False,
+                include_paths=["Included"],
+            )
+
+            self.assertEqual(counts["downloaded"], 1)
+            self.assertEqual(counts["skipped"], 1)
+            self.assertEqual(state.include_paths, ["Included"])
+            self.assertTrue((Path(tmp) / "Included/Machine A/a.pdf").exists())
+            self.assertFalse((Path(tmp) / "Other/Machine B/b.pdf").exists())
+
     def test_safe_target_blocks_path_escape(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(RuntimeError):

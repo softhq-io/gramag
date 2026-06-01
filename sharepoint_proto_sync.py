@@ -178,6 +178,7 @@ class SyncState:
     drive_id: str | None = None
     root_item_id: str | None = None
     root_path: str = ""
+    include_paths: list[str] = field(default_factory=list)
     items: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
@@ -190,6 +191,7 @@ class SyncState:
             drive_id=data.get("drive_id"),
             root_item_id=data.get("root_item_id"),
             root_path=data.get("root_path", ""),
+            include_paths=data.get("include_paths", []),
             items=data.get("items", {}),
         )
 
@@ -200,14 +202,23 @@ class SyncState:
             "drive_id": self.drive_id,
             "root_item_id": self.root_item_id,
             "root_path": self.root_path,
+            "include_paths": self.include_paths,
             "items": self.items,
         }, indent=2, ensure_ascii=False))
 
-    def matches_scope(self, drive_id: str, root_item_id: str | None, root_path: str) -> bool:
+    def matches_scope(
+        self,
+        drive_id: str,
+        root_item_id: str | None,
+        root_path: str,
+        include_paths: list[str] | None = None,
+    ) -> bool:
+        normalized_includes = sorted(include_paths or [])
         return (
             self.drive_id == drive_id
             and self.root_item_id == root_item_id
             and self.root_path.strip("/") == root_path.strip("/")
+            and sorted(self.include_paths or []) == normalized_includes
         )
 
 
@@ -355,6 +366,28 @@ def safe_target(root: Path, rel_path: str) -> Path:
     return target
 
 
+def normalize_sharepoint_path(path: str) -> str:
+    return posixpath.normpath(path.replace("\\", "/").strip("/"))
+
+
+def parse_include_paths(value: str | None) -> list[str]:
+    if not value:
+        return []
+    paths = []
+    for raw in value.replace("\n", ",").split(","):
+        normalized = normalize_sharepoint_path(raw)
+        if normalized and normalized != ".":
+            paths.append(normalized)
+    return sorted(dict.fromkeys(paths))
+
+
+def path_is_included(rel_path: str, include_paths: list[str]) -> bool:
+    if not include_paths:
+        return True
+    rel = normalize_sharepoint_path(rel_path)
+    return any(rel == include or rel.startswith(f"{include}/") for include in include_paths)
+
+
 def set_mtime(path: Path, timestamp: str | None):
     if not timestamp:
         return
@@ -387,13 +420,16 @@ def mirror_delta(
     allowed_extensions: set[str],
     full: bool,
     max_downloads: int | None = None,
+    include_paths: list[str] | None = None,
 ) -> dict[str, int]:
-    if full or not state.matches_scope(drive_id, root_item_id, root_path):
+    include_paths = include_paths or []
+    if full or not state.matches_scope(drive_id, root_item_id, root_path, include_paths):
         state.delta_link = None
         state.items = {}
         state.drive_id = drive_id
         state.root_item_id = root_item_id
         state.root_path = root_path.strip("/")
+        state.include_paths = include_paths
 
     if state.delta_link:
         next_url = state.delta_link
@@ -422,6 +458,9 @@ def mirror_delta(
                 continue
             rel_path = relative_path_for_item(client, drive_id, item, root_path, state)
             if not rel_path:
+                counts["skipped"] += 1
+                continue
+            if not path_is_included(rel_path, include_paths):
                 counts["skipped"] += 1
                 continue
             ext = Path(rel_path).suffix.lower()
@@ -510,6 +549,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=env("SHAREPOINT_DELTA_STATE", str(Path(PROTO_CACHE_DIR) / "sharepoint_delta_state.json")),
     )
     ap.add_argument("--extensions", default=env("SHAREPOINT_EXTENSIONS", ",".join(sorted(DEFAULT_EXTENSIONS))))
+    ap.add_argument("--include-paths", default=env("SHAREPOINT_INCLUDE_PATHS"), help="Comma-separated relative paths under the selected root to mirror")
     ap.add_argument("--max-downloads", type=int, default=None, help="Download at most this many files, useful for smoke tests")
     ap.add_argument("--full", action="store_true", help="Ignore saved delta token and rescan the selected library/folder")
     ap.add_argument("--inspect-fit", action="store_true", help="List children and check whether the root matches Proto's machine-folder layout")
@@ -567,6 +607,7 @@ def main():
         parse_extensions(args.extensions),
         args.full,
         max_downloads=args.max_downloads,
+        include_paths=parse_include_paths(args.include_paths),
     )
     state.save(state_path)
 
