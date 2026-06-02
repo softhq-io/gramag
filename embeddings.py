@@ -1,12 +1,22 @@
 """Azure OpenAI embedding wrapper for Gramag Knowledge Graph."""
 
+import os
 import time
 from ai_client import embed_batch, embed_one
 
 
+MAX_EMBED_CHARS = int(os.getenv("EMBED_MAX_CHARS", "18000"))
+
+
+def _trim_for_embedding(text: str) -> str:
+    if len(text) <= MAX_EMBED_CHARS:
+        return text
+    return text[:MAX_EMBED_CHARS] + "\n\n[TRUNCATED FOR EMBEDDING]"
+
+
 def generate_embedding(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> list[float]:
     """Generate embedding for a single text."""
-    return embed_one(text, input_type=task_type)
+    return embed_one(_trim_for_embedding(text), input_type=task_type)
 
 
 def generate_embeddings_batch(
@@ -21,7 +31,7 @@ def generate_embeddings_batch(
 
     all_embeddings = []
     for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
+        batch = [_trim_for_embedding(text) for text in texts[i:i + batch_size]]
         try:
             all_embeddings.extend(embed_batch(batch, input_type=task_type))
         except Exception as e:
@@ -31,8 +41,12 @@ def generate_embeddings_batch(
             try:
                 all_embeddings.extend(embed_batch(batch, input_type=task_type))
             except Exception:
-                # Fill with empty embeddings
-                all_embeddings.extend([[] for _ in batch])
+                for text in batch:
+                    try:
+                        all_embeddings.append(embed_one(text, input_type=task_type))
+                    except Exception as item_error:
+                        print(f"  Embed item error at batch {i}: {item_error}")
+                        all_embeddings.append([])
 
         if delay > 0:
             time.sleep(delay)
