@@ -26,7 +26,7 @@ def extract_page_refs(query: str) -> list[int]:
 
 
 def _vector_search(label: str, query_embedding: list[float], top_k: int,
-                   machine_slug: str | None) -> list[dict]:
+                   machine_slug: str | None, customer: str | None) -> list[dict]:
     try:
         result = proto_db.query(
             f"""
@@ -38,14 +38,15 @@ def _vector_search(label: str, query_embedding: list[float], top_k: int,
                 OR (node:ConfigFile AND (d)-[:HAS_CONFIG]->(node))
                 OR (node:ImageAsset AND (d)-[:HAS_IMAGE]->(node)))
             WITH node, score, m, d
-            WHERE $slug IS NULL OR m.slug = $slug
+            WHERE ($slug IS NULL OR m.slug = $slug)
+              AND ($customer IS NULL OR coalesce(m.customer, '') = $customer)
             RETURN node, score, m.slug AS machine_slug, m.folder AS machine_folder,
                    d.name AS doc_name, d.kind AS doc_kind, d.category AS category,
                    d.id AS document_id
             ORDER BY score DESC
             LIMIT $k
             """,
-            {"emb": query_embedding, "k": top_k, "slug": machine_slug},
+            {"emb": query_embedding, "k": top_k, "slug": machine_slug, "customer": customer},
         )
     except Exception as e:
         print(f"  vector search error on {label}: {e}")
@@ -78,19 +79,25 @@ def _vector_search(label: str, query_embedding: list[float], top_k: int,
     return out
 
 
-def _fetch_pages_direct(pages: list[int], machine_slug: str | None, top_k: int) -> list[dict]:
+def _fetch_pages_direct(
+    pages: list[int],
+    machine_slug: str | None,
+    customer: str | None,
+    top_k: int,
+) -> list[dict]:
     """Directly fetch ManualSections matching specific page numbers."""
     result = proto_db.query(
         """
         MATCH (m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_SECTION]->(s:ManualSection)
         WHERE s.page IN $pages
           AND ($slug IS NULL OR m.slug = $slug)
+          AND ($customer IS NULL OR coalesce(m.customer, '') = $customer)
         RETURN s, m.slug AS machine_slug, m.folder AS machine_folder,
                d.name AS doc_name, d.kind AS doc_kind, d.category AS category,
                d.id AS document_id
         LIMIT $k
         """,
-        {"pages": pages, "slug": machine_slug, "k": top_k},
+        {"pages": pages, "slug": machine_slug, "customer": customer, "k": top_k},
     )
     out = []
     for row in result.result_set or []:
@@ -132,7 +139,12 @@ _STOP = {
 }
 
 
-def _keyword_boost(query: str, machine_slug: str | None, limit: int = 15) -> list[dict]:
+def _keyword_boost(
+    query: str,
+    machine_slug: str | None,
+    customer: str | None,
+    limit: int = 15,
+) -> list[dict]:
     """Boost sections whose parent Document.name matches query keywords.
 
     Uses FalkorDB fulltext on Document.name. Returns sections of matched
@@ -173,7 +185,8 @@ def _keyword_boost(query: str, machine_slug: str | None, limit: int = 15) -> lis
             CALL db.idx.fulltext.queryNodes('ManualSection', $q)
             YIELD node AS s, score AS ft_score
             MATCH (m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_SECTION]->(s)
-            WHERE $slug IS NULL OR m.slug = $slug
+            WHERE ($slug IS NULL OR m.slug = $slug)
+              AND ($customer IS NULL OR coalesce(m.customer, '') = $customer)
             RETURN s, ft_score,
                    m.slug AS machine_slug, m.folder AS machine_folder,
                    d.name AS doc_name, d.kind AS doc_kind,
@@ -181,7 +194,7 @@ def _keyword_boost(query: str, machine_slug: str | None, limit: int = 15) -> lis
             ORDER BY ft_score DESC
             LIMIT $k
             """,
-            {"q": ft_query, "slug": machine_slug, "k": limit},
+            {"q": ft_query, "slug": machine_slug, "customer": customer, "k": limit},
         )
     except Exception as e:
         print(f"  keyword_boost fulltext error: {e}")
@@ -215,6 +228,7 @@ def _keyword_boost(query: str, machine_slug: str | None, limit: int = 15) -> lis
 
 
 def retrieve(query: str, *, top_k: int = 8, machine_slug: str | None = None,
+             customer: str | None = None,
              include: tuple[str, ...] = ("ManualSection", "ConfigFile", "ImageAsset"),
              quotas: dict[str, float] | None = None) -> list[dict]:
     quotas = quotas or DEFAULT_QUOTAS
@@ -224,7 +238,7 @@ def retrieve(query: str, *, top_k: int = 8, machine_slug: str | None = None,
     page_refs = extract_page_refs(query)
     direct_ids: set[str] = set()
     if page_refs:
-        direct = _fetch_pages_direct(page_refs, machine_slug, top_k=len(page_refs) * 8)
+        direct = _fetch_pages_direct(page_refs, machine_slug, customer, top_k=len(page_refs) * 8)
         for d in direct:
             direct_ids.add(d["id"])
         merged.extend(direct)
@@ -236,13 +250,13 @@ def retrieve(query: str, *, top_k: int = 8, machine_slug: str | None = None,
     query_emb = generate_query_embedding(query)
 
     # Keyword boost via fulltext on Document names
-    kw_hits = _keyword_boost(query, machine_slug, limit=max(6, top_k))
+    kw_hits = _keyword_boost(query, machine_slug, customer, limit=max(6, top_k))
     kw_ids = {h["id"] for h in kw_hits}
 
     # Per-label fetch with quotas. Over-fetch then trim to quota.
     by_label: dict[str, list[dict]] = {}
     for label in include:
-        items = _vector_search(label, query_emb, top_k * 3, machine_slug)
+        items = _vector_search(label, query_emb, top_k * 3, machine_slug, customer)
         # For ManualSection, merge kw hits; keep best score per id
         if label == "ManualSection":
             best: dict[str, dict] = {}

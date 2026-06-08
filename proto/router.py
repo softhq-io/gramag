@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/proto", tags=["proto"])
 class ProtoQuery(BaseModel):
     query: str
     machine_slug: str | None = None
+    customer: str | None = None
     top_k: int = 6
     deep: bool = False
 
@@ -25,7 +26,11 @@ class ProtoQuery(BaseModel):
 @router.post("/ask")
 def ask(q: ProtoQuery):
     return generate_answer(
-        q.query, machine_slug=q.machine_slug, top_k=q.top_k, deep=q.deep,
+        q.query,
+        machine_slug=q.machine_slug,
+        customer=q.customer,
+        top_k=q.top_k,
+        deep=q.deep,
     )
 
 

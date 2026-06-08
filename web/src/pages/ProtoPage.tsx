@@ -17,6 +17,7 @@ export function ProtoPage() {
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [sectionDetail, setSectionDetail] = useState<ProtoSectionDetail | null>(null)
   const [activeCite, setActiveCite] = useState<number | null>(null)
+  const [kunde, setKunde] = useState<string>('Alle')
   const [hersteller, setHersteller] = useState<string>('Alle')
   const [sonstigesOpen, setSonstigesOpen] = useState(false)
 
@@ -26,12 +27,18 @@ export function ProtoPage() {
 
   const selMachine = overview?.machines.find((m) => m.slug === selected) || null
 
-  const { primary, sonstiges, herstellerOptions } = useMemo(() => {
-    if (!overview) return { primary: [], sonstiges: [], herstellerOptions: [] }
-    const opts = ['Alle', ...new Set(overview.machines.map((m) => m.hersteller))]
-    const filtered = hersteller === 'Alle'
+  const { primary, sonstiges, herstellerOptions, kundenOptions } = useMemo(() => {
+    if (!overview) {
+      return { primary: [], sonstiges: [], herstellerOptions: [], kundenOptions: [] }
+    }
+    const kundenOptions = ['Alle', ...new Set(overview.machines.map((m) => m.customer).filter(Boolean) as string[])]
+    const byCustomer = kunde === 'Alle'
       ? overview.machines
-      : overview.machines.filter((m) => m.hersteller === hersteller)
+      : overview.machines.filter((m) => m.customer === kunde)
+    const herstellerOptions = ['Alle', ...new Set(byCustomer.map((m) => m.hersteller))]
+    const filtered = hersteller === 'Alle'
+      ? byCustomer
+      : byCustomer.filter((m) => m.hersteller === hersteller)
     const primary = filtered.filter(
       (m) => (m.docs ?? 0) > 0 || (m.imgs ?? 0) > 0 || (m.txts ?? 0) > 0,
     )
@@ -39,8 +46,13 @@ export function ProtoPage() {
       (m) => (m.docs ?? 0) === 0 && (m.imgs ?? 0) === 0 && (m.txts ?? 0) === 0,
     )
     primary.sort((a, b) => (b.sections ?? 0) - (a.sections ?? 0))
-    return { primary, sonstiges, herstellerOptions: opts }
-  }, [overview, hersteller])
+    return { primary, sonstiges, herstellerOptions, kundenOptions }
+  }, [overview, kunde, hersteller])
+
+  useEffect(() => {
+    if (hersteller === 'Alle' || herstellerOptions.includes(hersteller)) return
+    setHersteller('Alle')
+  }, [hersteller, herstellerOptions])
 
   function pickMachine(slug: string) {
     setSelected(slug)
@@ -67,7 +79,12 @@ export function ProtoPage() {
     setActiveCite(null)
     setMode('ask')
     try {
-      const r = await askProto({ query: text, machine_slug: selected, deep })
+      const r = await askProto({
+        query: text,
+        machine_slug: selected,
+        customer: selected ? null : kunde === 'Alle' ? null : kunde,
+        deep,
+      })
       setResponse(r)
     } catch (e) {
       console.error(e)
@@ -115,9 +132,12 @@ export function ProtoPage() {
           primary={primary}
           sonstiges={sonstiges}
           hersteller={hersteller}
+          kunde={kunde}
           herstellerOptions={herstellerOptions}
+          kundenOptions={kundenOptions}
           sonstigesOpen={sonstigesOpen}
           onPickMachine={pickMachine}
+          onChangeKunde={setKunde}
           onChangeHersteller={setHersteller}
           onToggleSonstiges={() => setSonstigesOpen(!sonstigesOpen)}
           query={query}
@@ -159,7 +179,7 @@ export function ProtoPage() {
           sectionDetail={sectionDetail}
           setSectionDetail={setSectionDetail}
           setLightbox={setLightbox}
-          scope={selMachine ? selMachine.folder : 'Alle 14 Maschinen'}
+          scope={selMachine ? selMachine.folder : kunde === 'Alle' ? 'Alle Maschinen' : kunde}
           onBack={selMachine ? () => setMode('machine') : backToSite}
         />
       )}
@@ -179,10 +199,13 @@ function SiteOverview({
   overview,
   primary,
   sonstiges,
+  kunde,
   hersteller,
+  kundenOptions,
   herstellerOptions,
   sonstigesOpen,
   onPickMachine,
+  onChangeKunde,
   onChangeHersteller,
   onToggleSonstiges,
   query,
@@ -195,10 +218,13 @@ function SiteOverview({
   overview: CustomerOverview
   primary: CustomerOverview['machines']
   sonstiges: CustomerOverview['machines']
+  kunde: string
   hersteller: string
+  kundenOptions: string[]
   herstellerOptions: string[]
   sonstigesOpen: boolean
   onPickMachine: (slug: string) => void
+  onChangeKunde: (k: string) => void
   onChangeHersteller: (h: string) => void
   onToggleSonstiges: () => void
   query: string
@@ -246,23 +272,38 @@ function SiteOverview({
         </button>
       </div>
       <div className="proto2-ask-meta">
-        Standard-Bereich: <strong>alle {s.machines} Maschinen</strong> · nach Klick
-        auf eine Maschine eingrenzbar
+        Standard-Bereich:{' '}
+        <strong>{kunde === 'Alle' ? `alle ${s.machines} Maschinen` : kunde}</strong> ·
+        nach Klick auf eine Maschine weiter eingrenzbar
       </div>
 
       <div className="proto2-section-row">
         <div className="proto2-section-title">Maschinen</div>
-        <div className="proto2-filter-row">
-          <span className="label">Hersteller:</span>
-          {herstellerOptions.map((h) => (
-            <span
-              key={h}
-              className={`chip ${hersteller === h ? 'active' : ''}`}
-              onClick={() => onChangeHersteller(h)}
-            >
-              {h}
-            </span>
-          ))}
+        <div className="proto2-filters">
+          <div className="proto2-filter-row">
+            <span className="label">Kunde:</span>
+            {kundenOptions.map((k) => (
+              <span
+                key={k}
+                className={`chip ${kunde === k ? 'active' : ''}`}
+                onClick={() => onChangeKunde(k)}
+              >
+                {k}
+              </span>
+            ))}
+          </div>
+          <div className="proto2-filter-row">
+            <span className="label">Hersteller:</span>
+            {herstellerOptions.map((h) => (
+              <span
+                key={h}
+                className={`chip ${hersteller === h ? 'active' : ''}`}
+                onClick={() => onChangeHersteller(h)}
+              >
+                {h}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 

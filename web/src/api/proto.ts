@@ -77,6 +77,7 @@ export function getCustomerOverview(): Promise<CustomerOverview> {
 export function askProto(body: {
   query: string
   machine_slug?: string | null
+  customer?: string | null
   top_k?: number
   deep?: boolean
 }): Promise<ProtoAnswerResponse> {

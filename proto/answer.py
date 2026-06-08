@@ -77,9 +77,9 @@ def _build_evidence_parts(hits: list[dict], max_images: int = 6) -> tuple[list, 
     return parts, citations
 
 
-def answer(query: str, *, machine_slug: str | None = None, top_k: int = 6,
-           deep: bool = False) -> dict:
-    hits = retrieve(query, top_k=top_k, machine_slug=machine_slug)
+def answer(query: str, *, machine_slug: str | None = None, customer: str | None = None,
+           top_k: int = 6, deep: bool = False) -> dict:
+    hits = retrieve(query, top_k=top_k, machine_slug=machine_slug, customer=customer)
     if not hits:
         return {
             "answer": "Brak wyników w bazie dla tego zapytania.",
