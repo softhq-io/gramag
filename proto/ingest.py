@@ -14,6 +14,7 @@ from pathlib import Path
 
 import fitz
 
+from db_helpers import result_value
 from embeddings import generate_embedding, generate_embeddings_batch
 from proto import PROTO_CACHE_DIR, PROTO_MANIFEST_PATH, SAMPLE_MACHINES
 from proto.db_proto import proto_db
@@ -68,17 +69,59 @@ def _source_fingerprint(f: dict) -> str:
     return f"{f.get('rel', f.get('path', ''))}|{size}|{int(mtime or 0)}"
 
 
-def _checkpoint_done(done: dict, key: str, f: dict, *, force: bool = False) -> bool:
+def _document_payload_present(doc_id: str, kind: str) -> bool:
+    rel, label = {
+        "pdf": ("HAS_SECTION", "ManualSection"),
+        "text": ("HAS_CONFIG", "ConfigFile"),
+        "image": ("HAS_IMAGE", "ImageAsset"),
+    }[kind]
+    docs = result_value(
+        proto_db.query("MATCH (d:Document {id: $doc_id}) RETURN count(d) AS c", {"doc_id": doc_id}),
+        "c",
+        0,
+    )
+    if not docs:
+        return False
+    payload = result_value(
+        proto_db.query(
+            f"""
+            MATCH (d:Document {{id: $doc_id}})-[:{rel}]->(n:{label})
+            RETURN count(n) AS c
+            """,
+            {"doc_id": doc_id},
+        ),
+        "c",
+        0,
+    )
+    return bool(payload)
+
+
+def _checkpoint_done(
+    done: dict,
+    key: str,
+    f: dict,
+    *,
+    force: bool = False,
+    machine_slug: str | None = None,
+    kind: str | None = None,
+) -> bool:
     if force:
         return False
     entry = done.get(key)
     if not entry:
         return False
+    if entry.get("err"):
+        return False
     fingerprint = _source_fingerprint(f)
     if not entry.get("fingerprint"):
         entry["fingerprint"] = fingerprint
         return True
-    return entry.get("fingerprint") == fingerprint
+    if entry.get("fingerprint") != fingerprint:
+        return False
+    if machine_slug and kind:
+        doc_id = _id(machine_slug, f["rel"])
+        return _document_payload_present(doc_id, kind)
+    return True
 
 
 def clear_document_payload(doc_id: str):
@@ -351,7 +394,7 @@ def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
     print(f"  PDFs: {len(pdfs)}")
     for i, f in enumerate(pdfs, start=1):
         key = f"pdf::{f['rel']}"
-        if _checkpoint_done(done, key, f, force=force):
+        if _checkpoint_done(done, key, f, force=force, machine_slug=slug, kind="pdf"):
             continue
         print(f"    [{i}/{len(pdfs)}] {f['name']}")
         cat_id = categories.get(f["category"]) or upsert_category(slug, f["category"])
@@ -380,7 +423,7 @@ def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
     print(f"  Configs: {len(texts)}")
     for i, f in enumerate(texts, start=1):
         key = f"txt::{f['rel']}"
-        if _checkpoint_done(done, key, f, force=force):
+        if _checkpoint_done(done, key, f, force=force, machine_slug=slug, kind="text"):
             continue
         print(f"    [{i}/{len(texts)}] {f['name']}")
         cat_id = categories.get(f["category"]) or upsert_category(slug, f["category"])
@@ -399,7 +442,7 @@ def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
     pending = [
         (i, f)
         for i, f in enumerate(imgs, start=1)
-        if not _checkpoint_done(done, f"img::{f['rel']}", f, force=force)
+        if not _checkpoint_done(done, f"img::{f['rel']}", f, force=force, machine_slug=slug, kind="image")
     ]
     if pending:
         def _do_img(i, f):
