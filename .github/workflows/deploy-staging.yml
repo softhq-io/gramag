@@ -95,3 +95,12 @@ jobs:
           TF_VAR_sharepoint_client_id: ${{ secrets.SHAREPOINT_CLIENT_ID }}
           TF_VAR_sharepoint_client_secret: ${{ secrets.SHAREPOINT_CLIENT_SECRET }}
         run: tofu apply -auto-approve -var "image_tag=${{ github.sha }}"
+
+      - name: Start staging Proto ingest
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[run-proto-ingest]')
+        run: |
+          az containerapp job start \
+            --name staging-sp-proto-ingest \
+            --resource-group gramag-staging-rg \
+            --query name \
+            --output tsv
