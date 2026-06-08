@@ -2357,6 +2357,14 @@ body {
 .proto2-filter-row .label { font-size: 10px; color: var(--text-secondary); margin-right: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
 .proto2-filter-row .chip { background: var(--bg-tertiary); border: 1px solid var(--border); padding: 3px 10px; border-radius: 999px; font-size: 11px; cursor: pointer; }
 .proto2-filter-row .chip.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+.proto2-customer-picker { position: relative; width: min(360px, 58vw); }
+.proto2-customer-picker input { width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-primary); border-radius: 8px; padding: 7px 10px; font-size: 12px; outline: none; }
+.proto2-customer-picker input:focus { border-color: var(--accent-blue); }
+.proto2-customer-menu { position: absolute; z-index: 30; top: calc(100% + 5px); right: 0; width: 100%; max-height: 280px; overflow: auto; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 14px 34px rgba(0,0,0,0.42); padding: 5px; }
+.proto2-customer-menu button { width: 100%; text-align: left; background: transparent; color: var(--text-primary); border: 0; border-radius: 6px; padding: 7px 8px; font-size: 12px; cursor: pointer; }
+.proto2-customer-menu button:hover,
+.proto2-customer-menu button.active { background: var(--bg-tertiary); color: #fff; }
+.proto2-customer-menu .empty { color: var(--text-secondary); font-size: 12px; padding: 8px; }
 
 .proto2-machine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
 .proto2-machine-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.12s; }
@@ -2398,6 +2406,10 @@ body {
 .proto2-loading-block { padding: 24px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; color: var(--text-secondary); margin-top: 14px; }
 
 @media (max-width: 880px) {
+  .proto2-section-row { align-items: stretch; }
+  .proto2-filters { width: 100%; align-items: stretch; }
+  .proto2-filter-row { align-items: flex-start; }
+  .proto2-customer-picker { width: 100%; }
   .proto2-machine-hero { grid-template-columns: 1fr; }
 }
 

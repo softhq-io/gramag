@@ -31,7 +31,11 @@ export function ProtoPage() {
     if (!overview) {
       return { primary: [], sonstiges: [], herstellerOptions: [], kundenOptions: [] }
     }
-    const kundenOptions = ['Alle', ...new Set(overview.machines.map((m) => m.customer).filter(Boolean) as string[])]
+    const kundenOptions = [
+      'Alle',
+      ...Array.from(new Set(overview.machines.map((m) => m.customer).filter(Boolean) as string[]))
+        .sort((a, b) => a.localeCompare(b, 'de-CH')),
+    ]
     const byCustomer = kunde === 'Alle'
       ? overview.machines
       : overview.machines.filter((m) => m.customer === kunde)
@@ -282,15 +286,7 @@ function SiteOverview({
         <div className="proto2-filters">
           <div className="proto2-filter-row">
             <span className="label">Kunde:</span>
-            {kundenOptions.map((k) => (
-              <span
-                key={k}
-                className={`chip ${kunde === k ? 'active' : ''}`}
-                onClick={() => onChangeKunde(k)}
-              >
-                {k}
-              </span>
-            ))}
+            <CustomerPicker value={kunde} options={kundenOptions} onChange={onChangeKunde} />
           </div>
           <div className="proto2-filter-row">
             <span className="label">Hersteller:</span>
@@ -351,6 +347,76 @@ function Stat({ v, l }: { v: number | string; l: string }) {
     <div className="proto2-stat">
       <span className="v">{formatted}</span>
       <span className="l">{l}</span>
+    </div>
+  )
+}
+
+function CustomerPicker({
+  value,
+  options,
+  onChange,
+}: {
+  value: string
+  options: string[]
+  onChange: (value: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const visibleOptions = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    return options
+      .filter((option) => option === 'Alle' || !needle || option.toLowerCase().includes(needle))
+      .slice(0, 50)
+  }, [options, search])
+  const label = value === 'Alle' ? 'Alle Kunden' : value
+
+  function pick(option: string) {
+    onChange(option)
+    setSearch('')
+    setOpen(false)
+  }
+
+  return (
+    <div className="proto2-customer-picker">
+      <input
+        aria-label="Kunde auswählen"
+        value={open ? search : label}
+        onFocus={() => {
+          setOpen(true)
+          setSearch('')
+        }}
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onChange={(e) => {
+          setSearch(e.target.value)
+          setOpen(true)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setOpen(false)
+          }
+          if (e.key === 'Enter' && open && visibleOptions.length > 0) {
+            pick(visibleOptions[0])
+          }
+        }}
+        placeholder="Kunde suchen"
+      />
+      {open && (
+        <div className="proto2-customer-menu" onMouseDown={(e) => e.preventDefault()}>
+          {visibleOptions.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={option === value ? 'active' : ''}
+              onClick={() => pick(option)}
+            >
+              {option === 'Alle' ? 'Alle Kunden' : option}
+            </button>
+          ))}
+          {visibleOptions.length === 0 && (
+            <div className="empty">Keine Kunden gefunden</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
