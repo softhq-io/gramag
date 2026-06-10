@@ -1,8 +1,8 @@
-name: Backup Staging Data
+name: Backup Prod Data
 
 on:
   schedule:
-    - cron: "15 */6 * * *"
+    - cron: "45 */6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -13,9 +13,9 @@ jobs:
   snapshot:
     runs-on: ubuntu-latest
     env:
-      RESOURCE_GROUP: gramag-staging-rg
-      STORAGE_ACCOUNT: gramagstagingjcf0gh
-      FALKORDB_APP: staging-gramag-falkordb
+      RESOURCE_GROUP: gramag-prod-rg
+      STORAGE_ACCOUNT_PREFIX: gramagprod
+      FALKORDB_APP: gramag-falkordb
       FALKORDB_CONTAINER: falkordb
       RETENTION_DAYS: "14"
       MIN_SNAPSHOTS_PER_SHARE: "8"
@@ -27,6 +27,23 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve storage account
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          storage_account="$(az storage account list \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "[?starts_with(name, '$STORAGE_ACCOUNT_PREFIX')].name | [0]" \
+            --output tsv)"
+
+          if [ -z "$storage_account" ]; then
+            echo "No storage account with prefix $STORAGE_ACCOUNT_PREFIX found in $RESOURCE_GROUP"
+            exit 1
+          fi
+
+          echo "STORAGE_ACCOUNT=$storage_account" >> "$GITHUB_ENV"
 
       - name: Flush and verify FalkorDB persistence
         shell: bash
@@ -118,7 +135,7 @@ jobs:
           echo "FalkorDB persistence did not settle before snapshot timeout"
           exit 1
 
-      - name: Snapshot staging Azure File shares
+      - name: Snapshot production Azure File shares
         shell: bash
         run: |
           set -euo pipefail
@@ -138,7 +155,7 @@ jobs:
               --output table
           done
 
-      - name: Prune old staging snapshots
+      - name: Prune old production snapshots
         shell: bash
         run: |
           set -euo pipefail
