@@ -8,6 +8,9 @@ Run: python -m proto.ingest            # sample machines only
 import argparse
 import hashlib
 import json
+import os
+import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -28,10 +31,12 @@ from proto.vision import (
 CACHE = Path(PROTO_CACHE_DIR)
 PAGES_DIR = CACHE / "pages"
 CHECKPOINT = CACHE / "ingest_checkpoint.json"
+CHECKPOINT_LOCK = threading.Lock()
 CACHE.mkdir(parents=True, exist_ok=True)
 PAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 RENDER_DPI = 150
+SUPPORTED_KINDS = {"pdf", "text", "image"}
 
 
 def _id(*parts: str) -> str:
@@ -46,7 +51,47 @@ def _load_checkpoint() -> dict:
 
 
 def _save_checkpoint(cp: dict):
-    CHECKPOINT.write_text(json.dumps(cp, indent=2))
+    content = json.dumps(cp, indent=2)
+    CHECKPOINT.parent.mkdir(parents=True, exist_ok=True)
+    with CHECKPOINT_LOCK:
+        tmp_name = None
+        try:
+            fd, tmp_name = tempfile.mkstemp(
+                prefix=f".{CHECKPOINT.name}.",
+                suffix=".tmp",
+                dir=CHECKPOINT.parent,
+                text=True,
+            )
+            with os.fdopen(fd, "w") as tmp:
+                tmp.write(content)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            os.replace(tmp_name, CHECKPOINT)
+            try:
+                dir_fd = os.open(CHECKPOINT.parent, os.O_RDONLY)
+            except OSError:
+                dir_fd = None
+            if dir_fd is not None:
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+        finally:
+            if tmp_name and os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+
+
+def parse_kinds(value: str) -> set[str]:
+    kinds = {part.strip().lower() for part in value.split(",") if part.strip()}
+    unknown = kinds - SUPPORTED_KINDS
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"unsupported ingest kind(s): {', '.join(sorted(unknown))}; "
+            f"expected any of {', '.join(sorted(SUPPORTED_KINDS))}"
+        )
+    if not kinds:
+        raise argparse.ArgumentTypeError("at least one ingest kind is required")
+    return kinds
 
 
 def _load_manifest() -> dict:
@@ -375,7 +420,8 @@ def ingest_image_asset(machine_slug: str, cat_id: str, f: dict, *, deep: bool = 
 def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
                    max_pdfs: int | None = None, max_images: int | None = None,
                    workers: int = 8, img_workers: int = 8,
-                   force: bool = False):
+                   force: bool = False, kinds: set[str] | None = None):
+    kinds = kinds or SUPPORTED_KINDS
     slug = m["slug"]
     print(f"\n=== {m['folder']} ===")
     upsert_machine(m)
@@ -387,89 +433,89 @@ def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
     for cat in m["categories"]:
         categories[cat] = upsert_category(slug, cat)
 
-    # PDFs
-    pdfs = m["files"]["pdf"]
-    if max_pdfs is not None:
-        pdfs = pdfs[:max_pdfs]
-    print(f"  PDFs: {len(pdfs)}")
-    for i, f in enumerate(pdfs, start=1):
-        key = f"pdf::{f['rel']}"
-        if _checkpoint_done(done, key, f, force=force, machine_slug=slug, kind="pdf"):
-            continue
-        print(f"    [{i}/{len(pdfs)}] {f['name']}")
-        cat_id = categories.get(f["category"]) or upsert_category(slug, f["category"])
-        t0 = time.time()
-        try:
-            n = ingest_pdf(slug, cat_id, f, deep=deep, workers=workers)
-            done[key] = {
-                "sections": n,
-                "ts": time.time(),
-                "fingerprint": _source_fingerprint(f),
-            }
-            _save_checkpoint(cp)
-            print(f"      -> {n} sections in {time.time() - t0:.1f}s")
-        except Exception as e:
-            print(f"      ! pdf failed: {str(e)[:150]}")
-            done[key] = {
-                "sections": 0,
-                "ts": time.time(),
-                "fingerprint": _source_fingerprint(f),
-                "err": str(e)[:200],
-            }
-            _save_checkpoint(cp)
-
-    # Text configs
-    texts = m["files"]["text"]
-    print(f"  Configs: {len(texts)}")
-    for i, f in enumerate(texts, start=1):
-        key = f"txt::{f['rel']}"
-        if _checkpoint_done(done, key, f, force=force, machine_slug=slug, kind="text"):
-            continue
-        print(f"    [{i}/{len(texts)}] {f['name']}")
-        cat_id = categories.get(f["category"]) or upsert_category(slug, f["category"])
-        try:
-            n = ingest_text_config(slug, cat_id, f)
-            done[key] = {"ok": n, "ts": time.time(), "fingerprint": _source_fingerprint(f)}
-            _save_checkpoint(cp)
-        except Exception as e:
-            print(f"      ! {e}")
-
-    # Images — parallel caption + embed
-    imgs = m["files"]["image"]
-    if max_images is not None:
-        imgs = imgs[:max_images]
-    print(f"  Images: {len(imgs)}")
-    pending = [
-        (i, f)
-        for i, f in enumerate(imgs, start=1)
-        if not _checkpoint_done(done, f"img::{f['rel']}", f, force=force, machine_slug=slug, kind="image")
-    ]
-    if pending:
-        def _do_img(i, f):
-            cat = categories.get(f["category"]) or upsert_category(slug, f["category"])
+    if "pdf" in kinds:
+        pdfs = m["files"]["pdf"]
+        if max_pdfs is not None:
+            pdfs = pdfs[:max_pdfs]
+        print(f"  PDFs: {len(pdfs)}")
+        for i, f in enumerate(pdfs, start=1):
+            key = f"pdf::{f['rel']}"
+            if _checkpoint_done(done, key, f, force=force, machine_slug=slug, kind="pdf"):
+                continue
+            print(f"    [{i}/{len(pdfs)}] {f['name']}")
+            cat_id = categories.get(f["category"]) or upsert_category(slug, f["category"])
+            t0 = time.time()
             try:
-                n = ingest_image_asset(slug, cat, f, deep=deep)
-                return (f["rel"], n, None)
-            except Exception as e:
-                return (f["rel"], 0, str(e))
-
-        with ThreadPoolExecutor(max_workers=img_workers) as pool:
-            futures = {pool.submit(_do_img, i, f): (i, f) for i, f in pending}
-            for fut in as_completed(futures):
-                i, f = futures[fut]
-                rel, n, err = fut.result()
-                key = f"img::{rel}"
-                if err:
-                    print(f"    [{i}/{len(imgs)}] {f['name']}  ! {err}")
-                else:
-                    print(f"    [{i}/{len(imgs)}] {f['name']}  ok")
+                n = ingest_pdf(slug, cat_id, f, deep=deep, workers=workers)
                 done[key] = {
-                    "ok": n,
+                    "sections": n,
                     "ts": time.time(),
                     "fingerprint": _source_fingerprint(f),
-                    **({"err": err} if err else {}),
                 }
                 _save_checkpoint(cp)
+                print(f"      -> {n} sections in {time.time() - t0:.1f}s")
+            except Exception as e:
+                print(f"      ! pdf failed: {str(e)[:150]}")
+                done[key] = {
+                    "sections": 0,
+                    "ts": time.time(),
+                    "fingerprint": _source_fingerprint(f),
+                    "err": str(e)[:200],
+                }
+                _save_checkpoint(cp)
+
+    if "text" in kinds:
+        texts = m["files"]["text"]
+        print(f"  Configs: {len(texts)}")
+        for i, f in enumerate(texts, start=1):
+            key = f"txt::{f['rel']}"
+            if _checkpoint_done(done, key, f, force=force, machine_slug=slug, kind="text"):
+                continue
+            print(f"    [{i}/{len(texts)}] {f['name']}")
+            cat_id = categories.get(f["category"]) or upsert_category(slug, f["category"])
+            try:
+                n = ingest_text_config(slug, cat_id, f)
+                done[key] = {"ok": n, "ts": time.time(), "fingerprint": _source_fingerprint(f)}
+                _save_checkpoint(cp)
+            except Exception as e:
+                print(f"      ! {e}")
+
+    if "image" in kinds:
+        imgs = m["files"]["image"]
+        if max_images is not None:
+            imgs = imgs[:max_images]
+        print(f"  Images: {len(imgs)}")
+        pending = [
+            (i, f)
+            for i, f in enumerate(imgs, start=1)
+            if not _checkpoint_done(done, f"img::{f['rel']}", f, force=force, machine_slug=slug, kind="image")
+        ]
+        if pending:
+            def _do_img(i, f):
+                cat = categories.get(f["category"]) or upsert_category(slug, f["category"])
+                try:
+                    n = ingest_image_asset(slug, cat, f, deep=deep)
+                    return (f["rel"], n, None)
+                except Exception as e:
+                    return (f["rel"], 0, str(e))
+
+            with ThreadPoolExecutor(max_workers=img_workers) as pool:
+                futures = {pool.submit(_do_img, i, f): (i, f) for i, f in pending}
+                for fut in as_completed(futures):
+                    i, f = futures[fut]
+                    rel, n, err = fut.result()
+                    key = f"img::{rel}"
+                    if err:
+                        print(f"    [{i}/{len(imgs)}] {f['name']}  ! {err}")
+                    else:
+                        print(f"    [{i}/{len(imgs)}] {f['name']}  ok")
+                    done[key] = {
+                        "ok": n,
+                        "ts": time.time(),
+                        "fingerprint": _source_fingerprint(f),
+                        **({"err": err} if err else {}),
+                    }
+                    _save_checkpoint(cp)
 
     _save_checkpoint(cp)
 
@@ -485,6 +531,7 @@ def main():
     ap.add_argument("--img-workers", type=int, default=24, help="Parallel image captions")
     ap.add_argument("--machine-workers", type=int, default=1, help="Parallel machines")
     ap.add_argument("--force", action="store_true", help="Reprocess files even when checkpoint fingerprints match")
+    ap.add_argument("--kinds", type=parse_kinds, default=SUPPORTED_KINDS, help="Comma-separated kinds to ingest: pdf,text,image")
     args = ap.parse_args()
 
     manifest = _load_manifest()
@@ -497,8 +544,9 @@ def main():
     else:
         targets = [m for m in manifest["machines"] if m["folder"] in SAMPLE_MACHINES]
 
-    print(f"Targets: {len(targets)} machines (machine_workers={args.machine_workers}, "
-          f"page_workers={args.workers}, img_workers={args.img_workers})")
+    print(f"Targets: {len(targets)} machines (kinds={','.join(sorted(args.kinds))}, "
+          f"machine_workers={args.machine_workers}, page_workers={args.workers}, "
+          f"img_workers={args.img_workers})")
     if args.machine_workers > 1 and len(targets) > 1:
         with ThreadPoolExecutor(max_workers=args.machine_workers) as pool:
             futs = [
@@ -506,7 +554,7 @@ def main():
                     ingest_machine, m, cp, deep=args.deep,
                     max_pdfs=args.max_pdfs, max_images=args.max_images,
                     workers=args.workers, img_workers=args.img_workers,
-                    force=args.force,
+                    force=args.force, kinds=args.kinds,
                 )
                 for m in targets
             ]
@@ -520,7 +568,7 @@ def main():
             ingest_machine(m, cp, deep=args.deep,
                            max_pdfs=args.max_pdfs, max_images=args.max_images,
                            workers=args.workers, img_workers=args.img_workers,
-                           force=args.force)
+                           force=args.force, kinds=args.kinds)
 
     print("\nDone.")
     print("Stats:")

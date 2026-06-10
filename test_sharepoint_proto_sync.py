@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
 
 import sharepoint_proto_sync as sync
@@ -176,6 +177,38 @@ class SharePointProtoSyncTests(unittest.TestCase):
             self.assertEqual(state.include_paths, ["Included"])
             self.assertTrue((Path(tmp) / "Included/Machine A/a.pdf").exists())
             self.assertFalse((Path(tmp) / "Other/Machine B/b.pdf").exists())
+
+    def test_parse_include_paths_accepts_newline_shard_lists(self):
+        self.assertEqual(
+            sync.parse_include_paths("Customer/Machine B\nCustomer/Machine A, Customer/Machine A"),
+            ["Customer/Machine A", "Customer/Machine B"],
+        )
+
+    def test_run_ingest_passes_kind_controls(self):
+        calls = []
+        original_run = sync.subprocess.run
+        try:
+            sync.subprocess.run = lambda command, check: calls.append((command, check))
+
+            sync.run_ingest(
+                Namespace(
+                    apply_schema=False,
+                    ingest_all=True,
+                    ingest_force=False,
+                    ingest_workers=2,
+                    ingest_img_workers=1,
+                    ingest_machine_workers=1,
+                    ingest_kinds="pdf,text",
+                    ingest_arg=[],
+                )
+            )
+
+            command, check = calls[0]
+            self.assertTrue(check)
+            self.assertIn("--kinds", command)
+            self.assertEqual(command[command.index("--kinds") + 1], "pdf,text")
+        finally:
+            sync.subprocess.run = original_run
 
     def test_safe_target_blocks_path_escape(self):
         with tempfile.TemporaryDirectory() as tmp:

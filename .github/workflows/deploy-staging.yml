@@ -126,8 +126,15 @@ jobs:
       - name: Start staging Proto ingest
         if: github.event_name == 'push' && contains(github.event.head_commit.message, '[run-proto-ingest]')
         run: |
-          az containerapp job start \
-            --name staging-sp-proto-ingest \
-            --resource-group gramag-staging-rg \
-            --query name \
-            --output tsv
+          for job in \
+            staging-sp-proto-birk01-pdf \
+            staging-sp-proto-birk02-pdf \
+            staging-sp-proto-birk03-pdf \
+            staging-sp-proto-birk04-pdf
+          do
+            az containerapp job start \
+              --name "$job" \
+              --resource-group gramag-staging-rg \
+              --query name \
+              --output tsv
+          done

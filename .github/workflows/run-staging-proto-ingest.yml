@@ -2,6 +2,20 @@ name: Run Staging Proto Ingest
 
 on:
   workflow_dispatch:
+    inputs:
+      phase:
+        description: "Ingest phase to start"
+        required: true
+        default: "pdf-text"
+        type: choice
+        options:
+          - pdf-text
+          - image
+          - custom
+      job_name:
+        description: "Custom Container App Job name when phase=custom"
+        required: false
+        type: string
 
 permissions:
   id-token: write
@@ -20,9 +34,35 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Start staging Proto ingest
+        env:
+          PHASE: ${{ inputs.phase }}
+          JOB_NAME: ${{ inputs.job_name }}
         run: |
-          az containerapp job start \
-            --name staging-sp-proto-ingest \
-            --resource-group gramag-staging-rg \
-            --query name \
-            --output tsv
+          if [ "$PHASE" = "pdf-text" ]; then
+            jobs=(
+              staging-sp-proto-birk01-pdf
+              staging-sp-proto-birk02-pdf
+              staging-sp-proto-birk03-pdf
+              staging-sp-proto-birk04-pdf
+            )
+          elif [ "$PHASE" = "image" ]; then
+            jobs=(
+              staging-sp-proto-birk01-img
+              staging-sp-proto-birk02-img
+              staging-sp-proto-birk03-img
+              staging-sp-proto-birk04-img
+            )
+          elif [ "$PHASE" = "custom" ] && [ -n "$JOB_NAME" ]; then
+            jobs=("$JOB_NAME")
+          else
+            echo "Invalid phase/job_name combination"
+            exit 1
+          fi
+
+          for job in "${jobs[@]}"; do
+            az containerapp job start \
+              --name "$job" \
+              --resource-group gramag-staging-rg \
+              --query name \
+              --output tsv
+          done

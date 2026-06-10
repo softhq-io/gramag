@@ -367,7 +367,7 @@ def safe_target(root: Path, rel_path: str) -> Path:
 
 
 def normalize_sharepoint_path(path: str) -> str:
-    return posixpath.normpath(path.replace("\\", "/").strip("/"))
+    return posixpath.normpath(path.strip().replace("\\", "/").strip("/"))
 
 
 def parse_include_paths(value: str | None) -> list[str]:
@@ -518,6 +518,7 @@ def run_ingest(args: argparse.Namespace):
     command.extend(["--workers", str(args.ingest_workers)])
     command.extend(["--img-workers", str(args.ingest_img_workers)])
     command.extend(["--machine-workers", str(args.ingest_machine_workers)])
+    command.extend(["--kinds", args.ingest_kinds])
     for value in args.ingest_arg:
         command.append(value)
     subprocess.run(command, check=True)
@@ -563,6 +564,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--ingest-workers", type=int, default=int(env("PROTO_INGEST_WORKERS", "8")))
     ap.add_argument("--ingest-img-workers", type=int, default=int(env("PROTO_INGEST_IMG_WORKERS", "4")))
     ap.add_argument("--ingest-machine-workers", type=int, default=int(env("PROTO_INGEST_MACHINE_WORKERS", "1")))
+    ap.add_argument("--ingest-kinds", default=env("PROTO_INGEST_KINDS", "pdf,text,image"))
     ap.add_argument("--ingest-arg", action="append", default=[], help="Additional raw argument for proto.ingest")
     return ap
 
