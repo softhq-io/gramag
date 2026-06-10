@@ -61,11 +61,7 @@ jobs:
             local status
             for attempt in {1..5}; do
               set +e
-              output="$(az containerapp exec \
-                --resource-group "$RESOURCE_GROUP" \
-                --name "$FALKORDB_APP" \
-                --container "$FALKORDB_CONTAINER" \
-                --command "redis-cli $*" 2>&1)"
+              output="$(script -q -e -c "az containerapp exec --resource-group '$RESOURCE_GROUP' --name '$FALKORDB_APP' --container '$FALKORDB_CONTAINER' --command 'redis-cli $*'" /dev/null 2>&1)"
               status=$?
               set -e
               if [ "$status" -eq 0 ]; then
