@@ -1,0 +1,90 @@
+name: Backup Staging Data
+
+on:
+  schedule:
+    - cron: "15 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    env:
+      RESOURCE_GROUP: gramag-staging-rg
+      STORAGE_ACCOUNT: gramagstagingjcf0gh
+      RETENTION_DAYS: "14"
+      MIN_SNAPSHOTS_PER_SHARE: "8"
+
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Snapshot staging Azure File shares
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          key="$(az storage account keys list \
+            --resource-group "$RESOURCE_GROUP" \
+            --account-name "$STORAGE_ACCOUNT" \
+            --query '[0].value' \
+            --output tsv)"
+
+          for share in falkordb-data app-data; do
+            echo "Creating snapshot for $share"
+            az storage share snapshot \
+              --account-name "$STORAGE_ACCOUNT" \
+              --account-key "$key" \
+              --name "$share" \
+              --output table
+          done
+
+      - name: Prune old staging snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          key="$(az storage account keys list \
+            --resource-group "$RESOURCE_GROUP" \
+            --account-name "$STORAGE_ACCOUNT" \
+            --query '[0].value' \
+            --output tsv)"
+          cutoff_epoch="$(date -u -d "$RETENTION_DAYS days ago" +%s)"
+
+          for share in falkordb-data app-data; do
+            mapfile -t snapshots < <(
+              az storage share list \
+                --account-name "$STORAGE_ACCOUNT" \
+                --account-key "$key" \
+                --include-snapshots \
+                --query "[?name=='$share' && snapshot != null].snapshot" \
+                --output tsv |
+              sort -r
+            )
+
+            snapshot_index=0
+            for snapshot in "${snapshots[@]}"; do
+              [ -n "$snapshot" ] || continue
+              snapshot_index=$((snapshot_index + 1))
+              if [ "$snapshot_index" -le "$MIN_SNAPSHOTS_PER_SHARE" ]; then
+                continue
+              fi
+              snapshot_epoch="$(date -u -d "$snapshot" +%s)"
+              if [ "$snapshot_epoch" -lt "$cutoff_epoch" ]; then
+                echo "Deleting $share snapshot $snapshot"
+                az storage share delete \
+                  --account-name "$STORAGE_ACCOUNT" \
+                  --account-key "$key" \
+                  --name "$share" \
+                  --snapshot "$snapshot" \
+                  --yes
+              fi
+            done
+          done

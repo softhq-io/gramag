@@ -96,6 +96,33 @@ jobs:
           TF_VAR_sharepoint_client_secret: ${{ secrets.SHAREPOINT_CLIENT_SECRET }}
         run: tofu apply -auto-approve -var "image_tag=${{ github.sha }}"
 
+      - name: Verify FalkorDB persistence config
+        run: |
+          set -euo pipefail
+
+          mount_path="$(az containerapp show \
+            --name staging-gramag-falkordb \
+            --resource-group gramag-staging-rg \
+            --query "properties.template.containers[0].volumeMounts[?volumeName=='falkordb-vol'].mountPath | [0]" \
+            --output tsv)"
+          if [ "$mount_path" != "/var/lib/falkordb/data" ]; then
+            echo "FalkorDB data volume must be mounted at /var/lib/falkordb/data, got: $mount_path"
+            exit 1
+          fi
+
+          redis_args="$(az containerapp show \
+            --name staging-gramag-falkordb \
+            --resource-group gramag-staging-rg \
+            --query "properties.template.containers[0].env[?name=='REDIS_ARGS'].value | [0]" \
+            --output tsv)"
+          case "$redis_args" in
+            *"--appendonly yes"*"--appendfsync everysec"*) ;;
+            *)
+              echo "FalkorDB REDIS_ARGS must enable AOF everysec, got: $redis_args"
+              exit 1
+              ;;
+          esac
+
       - name: Start staging Proto ingest
         if: github.event_name == 'push' && contains(github.event.head_commit.message, '[run-proto-ingest]')
         run: |

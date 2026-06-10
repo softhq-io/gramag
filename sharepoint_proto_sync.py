@@ -497,6 +497,7 @@ def mirror_delta(
 
 
 def rebuild_manifest(source_root: Path, manifest_path: Path, root_mode: str, customer_name: str | None):
+    source_root.mkdir(parents=True, exist_ok=True)
     manifest = build_manifest(str(source_root), root_mode=root_mode, customer_name=customer_name)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
