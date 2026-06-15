@@ -39,6 +39,10 @@ RENDER_DPI = 150
 SUPPORTED_KINDS = {"pdf", "text", "image"}
 
 
+class PDFIngestError(RuntimeError):
+    """Raised when a PDF cannot be fully represented in the graph."""
+
+
 def _id(*parts: str) -> str:
     h = hashlib.sha1("|".join(parts).encode()).hexdigest()[:16]
     return h
@@ -114,7 +118,7 @@ def _source_fingerprint(f: dict) -> str:
     return f"{f.get('rel', f.get('path', ''))}|{size}|{int(mtime or 0)}"
 
 
-def _document_payload_present(doc_id: str, kind: str) -> bool:
+def _document_payload_count(doc_id: str, kind: str) -> int:
     rel, label = {
         "pdf": ("HAS_SECTION", "ManualSection"),
         "text": ("HAS_CONFIG", "ConfigFile"),
@@ -126,8 +130,8 @@ def _document_payload_present(doc_id: str, kind: str) -> bool:
         0,
     )
     if not docs:
-        return False
-    payload = result_value(
+        return 0
+    return int(result_value(
         proto_db.query(
             f"""
             MATCH (d:Document {{id: $doc_id}})-[:{rel}]->(n:{label})
@@ -137,8 +141,23 @@ def _document_payload_present(doc_id: str, kind: str) -> bool:
         ),
         "c",
         0,
-    )
-    return bool(payload)
+    ))
+
+
+def _document_payload_present(doc_id: str, kind: str) -> bool:
+    return bool(_document_payload_count(doc_id, kind))
+
+
+def _pdf_page_count(f: dict) -> int | None:
+    try:
+        from proto import resolve_source
+        doc = fitz.open(Path(resolve_source(f["path"])))
+        try:
+            return int(doc.page_count)
+        finally:
+            doc.close()
+    except Exception:
+        return None
 
 
 def _checkpoint_done(
@@ -165,6 +184,12 @@ def _checkpoint_done(
         return False
     if machine_slug and kind:
         doc_id = _id(machine_slug, f["rel"])
+        if kind == "pdf":
+            expected = entry.get("expected_sections")
+            if expected is None:
+                expected = _pdf_page_count(f)
+            if expected is not None:
+                return _document_payload_count(doc_id, kind) >= int(expected)
         return _document_payload_present(doc_id, kind)
     return True
 
@@ -289,8 +314,7 @@ def ingest_pdf(machine_slug: str, cat_id: str, f: dict, *, deep: bool = False,
     try:
         pages = render_pdf_pages(pdf_path, doc_id)
     except Exception as e:
-        print(f"      ! render fail: {e}")
-        return 0
+        raise PDFIngestError(f"render failed: {e}") from e
     clear_document_payload(doc_id)
 
     vision_map: dict[int, str] = {}
@@ -321,15 +345,24 @@ def ingest_pdf(machine_slug: str, cat_id: str, f: dict, *, deep: bool = False,
         })
 
     if not sections:
-        return 0
+        raise PDFIngestError("PDF has no sections to ingest")
 
     # Batch embed merged content
     embeddings = generate_embeddings_batch([s["merged"] for s in sections])
+    if len(embeddings) != len(sections):
+        raise PDFIngestError(
+            f"embedding count mismatch: expected {len(sections)}, got {len(embeddings)}"
+        )
+    missing_embeddings = [s["page"] for s, emb in zip(sections, embeddings) if not emb]
+    if missing_embeddings:
+        pages_preview = ", ".join(str(page) for page in missing_embeddings[:5])
+        raise PDFIngestError(
+            f"missing embeddings for {len(missing_embeddings)} section(s), "
+            f"first page(s): {pages_preview}"
+        )
 
     written = 0
     for s, emb in zip(sections, embeddings):
-        if not emb:
-            continue
         try:
             proto_db.write(
                 """
@@ -349,6 +382,13 @@ def ingest_pdf(machine_slug: str, cat_id: str, f: dict, *, deep: bool = False,
             written += 1
         except Exception as e:
             print(f"      ! section write fail p{s['page']}: {str(e)[:120]}")
+            raise PDFIngestError(f"section write failed p{s['page']}: {e}") from e
+
+    stored = _document_payload_count(doc_id, "pdf")
+    if stored < len(sections):
+        raise PDFIngestError(
+            f"graph verification failed: expected {len(sections)} sections, found {stored}"
+        )
     return written
 
 
@@ -449,6 +489,7 @@ def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
                 n = ingest_pdf(slug, cat_id, f, deep=deep, workers=workers)
                 done[key] = {
                     "sections": n,
+                    "expected_sections": n,
                     "ts": time.time(),
                     "fingerprint": _source_fingerprint(f),
                 }

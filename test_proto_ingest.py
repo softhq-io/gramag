@@ -76,6 +76,71 @@ class ProtoIngestTests(unittest.TestCase):
             for name, value in originals.items():
                 setattr(ingest, name, value)
 
+    def test_ingest_pdf_raises_on_section_write_failure(self):
+        originals = {
+            "upsert_document": ingest.upsert_document,
+            "render_pdf_pages": ingest.render_pdf_pages,
+            "clear_document_payload": ingest.clear_document_payload,
+            "generate_embeddings_batch": ingest.generate_embeddings_batch,
+            "proto_db": ingest.proto_db,
+        }
+
+        class FailingDb:
+            def write(self, *_args, **_kwargs):
+                raise RuntimeError("connection closed by server")
+
+        try:
+            ingest.upsert_document = lambda *args, **kwargs: "doc-id"
+            ingest.render_pdf_pages = lambda *args, **kwargs: [
+                {"page": 1, "text": "manual text", "png_path": "pages/doc-id/p0001.png"}
+            ]
+            ingest.clear_document_payload = lambda doc_id: None
+            ingest.generate_embeddings_batch = lambda texts: [[0.1, 0.2, 0.3]]
+            ingest.proto_db = FailingDb()
+
+            with redirect_stdout(StringIO()):
+                with self.assertRaisesRegex(ingest.PDFIngestError, "section write failed p1"):
+                    ingest.ingest_pdf(
+                        "machine-slug",
+                        "category-id",
+                        {"rel": "manual.pdf", "path": "manual.pdf", "name": "manual.pdf", "category": "Manuals", "size": 1},
+                    )
+        finally:
+            for name, value in originals.items():
+                setattr(ingest, name, value)
+
+    def test_pdf_checkpoint_requires_expected_graph_sections(self):
+        originals = {
+            "_source_fingerprint": ingest._source_fingerprint,
+            "_pdf_page_count": ingest._pdf_page_count,
+            "_document_payload_count": ingest._document_payload_count,
+        }
+        try:
+            ingest._source_fingerprint = lambda f: "fingerprint"
+            ingest._pdf_page_count = lambda f: 5
+            ingest._document_payload_count = lambda doc_id, kind: 3
+
+            done = {
+                "pdf::manual.pdf": {
+                    "sections": 3,
+                    "ts": 1,
+                    "fingerprint": "fingerprint",
+                }
+            }
+
+            self.assertFalse(
+                ingest._checkpoint_done(
+                    done,
+                    "pdf::manual.pdf",
+                    {"rel": "manual.pdf", "path": "manual.pdf"},
+                    machine_slug="machine-slug",
+                    kind="pdf",
+                )
+            )
+        finally:
+            for name, value in originals.items():
+                setattr(ingest, name, value)
+
     def test_document_ids_are_distinct_for_disjoint_machine_shards(self):
         self.assertNotEqual(
             ingest._id("birkhaeuser-machine-a", "manual.pdf"),
