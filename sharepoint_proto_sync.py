@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import posixpath
+import re
 import ssl
 import subprocess
 import sys
@@ -504,6 +505,53 @@ def rebuild_manifest(source_root: Path, manifest_path: Path, root_mode: str, cus
     return manifest["summary"]
 
 
+def safe_log_name(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-") or "unknown"
+
+
+def ingest_log_path() -> Path:
+    log_dir = Path(env("PROTO_INGEST_LOG_DIR", str(Path(PROTO_CACHE_DIR).parent / "ingest-logs")))
+    job_name = (
+        env("CONTAINER_APP_JOB_NAME")
+        or env("CONTAINER_APP_NAME")
+        or Path(PROTO_CACHE_DIR).name
+        or "proto-ingest"
+    )
+    execution_name = (
+        env("CONTAINER_APP_JOB_EXECUTION_NAME")
+        or env("HOSTNAME")
+        or datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    )
+    return log_dir / safe_log_name(job_name) / f"{safe_log_name(execution_name)}.log"
+
+
+def run_logged_subprocess(command: list[str], log_path: Path):
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Writing ingest subprocess log to {log_path}", flush=True)
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write(f"\n--- ingest start {datetime.utcnow().isoformat()}Z ---\n")
+        log.write(f"command: {' '.join(command)}\n")
+        log.flush()
+        proc = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            log.write(line)
+            log.flush()
+        rc = proc.wait()
+        log.write(f"--- ingest end {datetime.utcnow().isoformat()}Z rc={rc} ---\n")
+        log.flush()
+    if rc:
+        raise subprocess.CalledProcessError(rc, command)
+
+
 def run_ingest(args: argparse.Namespace):
     if args.apply_schema:
         from proto.schema import apply_indexes
@@ -521,7 +569,7 @@ def run_ingest(args: argparse.Namespace):
     command.extend(["--kinds", args.ingest_kinds])
     for value in args.ingest_arg:
         command.append(value)
-    subprocess.run(command, check=True)
+    run_logged_subprocess(command, ingest_log_path())
 
 
 def parse_extensions(value: str) -> set[str]:

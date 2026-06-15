@@ -13,6 +13,7 @@ os.environ.setdefault("PROTO_ROOT", "/private/tmp/gramag-proto-test-source")
 os.environ.setdefault("PROTO_MANIFEST_PATH", "/private/tmp/gramag-proto-test-manifest.json")
 
 import proto.ingest as ingest
+from proto.db_proto import ProtoGraphConnection
 
 
 class ProtoIngestTests(unittest.TestCase):
@@ -146,6 +147,12 @@ class ProtoIngestTests(unittest.TestCase):
             ingest._id("birkhaeuser-machine-a", "manual.pdf"),
             ingest._id("birkhaeuser-machine-b", "manual.pdf"),
         )
+
+    def test_proto_db_retry_classifier_catches_redis_loading(self):
+        db = ProtoGraphConnection()
+        self.assertTrue(db._is_retryable_error(RuntimeError("Redis is loading the dataset in memory")))
+        self.assertTrue(db._is_retryable_error(RuntimeError("Connection closed by server")))
+        self.assertFalse(db._is_retryable_error(RuntimeError("syntax error")))
 
 
 if __name__ == "__main__":

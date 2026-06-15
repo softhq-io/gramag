@@ -1,5 +1,9 @@
 """FalkorDB connection wrapper for the proto graph (shared FalkorDB instance)."""
 
+import os
+import sys
+import time
+
 from falkordb import FalkorDB
 from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
 
@@ -30,25 +34,59 @@ class ProtoGraphConnection:
         self.graph = None
         return self.connect()
 
-    def _with_retry(self, fn, max_retries=2):
+    def _is_retryable_error(self, err: Exception) -> bool:
+        msg = str(err).lower()
+        return any(
+            fragment in msg
+            for fragment in (
+                "busy",
+                "closed",
+                "connection",
+                "defunct",
+                "loading",
+                "reset",
+                "temporarily",
+                "timeout",
+                "try again",
+            )
+        )
+
+    def _with_retry(self, fn, max_retries: int | None = None):
+        if max_retries is None:
+            max_retries = int(os.getenv("PROTO_DB_MAX_RETRIES", "8"))
+        base_delay = float(os.getenv("PROTO_DB_RETRY_BASE_DELAY", "1.5"))
+        max_delay = float(os.getenv("PROTO_DB_RETRY_MAX_DELAY", "30"))
         last = None
         for i in range(max_retries + 1):
             try:
                 return fn()
             except (RedisConnectionError, RedisTimeoutError) as e:
                 last = e
-                if i < max_retries:
-                    self.reconnect()
-                else:
+                if i >= max_retries:
                     raise
+                delay = min(max_delay, base_delay * (2 ** i))
+                print(
+                    f"FalkorDB retryable error ({i + 1}/{max_retries}); "
+                    f"sleeping {delay:.1f}s: {str(e)[:180]}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                time.sleep(delay)
+                self.reconnect()
             except Exception as e:
-                msg = str(e).lower()
-                if "defunct" in msg or "connection" in msg:
+                if self._is_retryable_error(e):
                     last = e
-                    if i < max_retries:
-                        self.reconnect()
-                    else:
+                    if i >= max_retries:
                         raise
+                    delay = min(max_delay, base_delay * (2 ** i))
+                    print(
+                        f"FalkorDB retryable error ({i + 1}/{max_retries}); "
+                        f"sleeping {delay:.1f}s: {str(e)[:180]}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    time.sleep(delay)
+                    self.reconnect()
                 else:
                     raise
         raise last

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from argparse import Namespace
@@ -178,6 +179,28 @@ class SharePointProtoSyncTests(unittest.TestCase):
             self.assertTrue((Path(tmp) / "Included/Machine A/a.pdf").exists())
             self.assertFalse((Path(tmp) / "Other/Machine B/b.pdf").exists())
 
+    def test_ingest_log_path_uses_durable_log_dir_and_safe_names(self):
+        original = {
+            "PROTO_INGEST_LOG_DIR": os.environ.get("PROTO_INGEST_LOG_DIR"),
+            "CONTAINER_APP_JOB_NAME": os.environ.get("CONTAINER_APP_JOB_NAME"),
+            "CONTAINER_APP_JOB_EXECUTION_NAME": os.environ.get("CONTAINER_APP_JOB_EXECUTION_NAME"),
+        }
+        try:
+            os.environ["PROTO_INGEST_LOG_DIR"] = "/data/ingest-logs"
+            os.environ["CONTAINER_APP_JOB_NAME"] = "staging/sp proto"
+            os.environ["CONTAINER_APP_JOB_EXECUTION_NAME"] = "exec:123"
+
+            self.assertEqual(
+                sync.ingest_log_path(),
+                Path("/data/ingest-logs/staging-sp-proto/exec-123.log"),
+            )
+        finally:
+            for name, value in original.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+
     def test_parse_include_paths_accepts_newline_shard_lists(self):
         self.assertEqual(
             sync.parse_include_paths("Customer/Machine B\nCustomer/Machine A, Customer/Machine A"),
@@ -186,9 +209,9 @@ class SharePointProtoSyncTests(unittest.TestCase):
 
     def test_run_ingest_passes_kind_controls(self):
         calls = []
-        original_run = sync.subprocess.run
+        original_run = sync.run_logged_subprocess
         try:
-            sync.subprocess.run = lambda command, check: calls.append((command, check))
+            sync.run_logged_subprocess = lambda command, log_path: calls.append((command, log_path))
 
             sync.run_ingest(
                 Namespace(
@@ -203,12 +226,12 @@ class SharePointProtoSyncTests(unittest.TestCase):
                 )
             )
 
-            command, check = calls[0]
-            self.assertTrue(check)
+            command, log_path = calls[0]
+            self.assertTrue(str(log_path).endswith(".log"))
             self.assertIn("--kinds", command)
             self.assertEqual(command[command.index("--kinds") + 1], "pdf,text")
         finally:
-            sync.subprocess.run = original_run
+            sync.run_logged_subprocess = original_run
 
     def test_safe_target_blocks_path_escape(self):
         with tempfile.TemporaryDirectory() as tmp:
