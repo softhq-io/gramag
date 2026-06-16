@@ -31,6 +31,7 @@ from proto.vision import (
 CACHE = Path(PROTO_CACHE_DIR)
 PAGES_DIR = CACHE / "pages"
 CHECKPOINT = CACHE / "ingest_checkpoint.json"
+STAGE_CHECKPOINT = CACHE / "stage_checkpoint.json"
 CHECKPOINT_LOCK = threading.Lock()
 CACHE.mkdir(parents=True, exist_ok=True)
 PAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -54,25 +55,26 @@ def _load_checkpoint() -> dict:
     return {"done": {}}
 
 
-def _save_checkpoint(cp: dict):
+def _save_checkpoint(cp: dict, path: Path | None = None):
+    checkpoint = path or CHECKPOINT
     content = json.dumps(cp, indent=2)
-    CHECKPOINT.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
     with CHECKPOINT_LOCK:
         tmp_name = None
         try:
             fd, tmp_name = tempfile.mkstemp(
-                prefix=f".{CHECKPOINT.name}.",
+                prefix=f".{checkpoint.name}.",
                 suffix=".tmp",
-                dir=CHECKPOINT.parent,
+                dir=checkpoint.parent,
                 text=True,
             )
             with os.fdopen(fd, "w") as tmp:
                 tmp.write(content)
                 tmp.flush()
                 os.fsync(tmp.fileno())
-            os.replace(tmp_name, CHECKPOINT)
+            os.replace(tmp_name, checkpoint)
             try:
-                dir_fd = os.open(CHECKPOINT.parent, os.O_RDONLY)
+                dir_fd = os.open(checkpoint.parent, os.O_RDONLY)
             except OSError:
                 dir_fd = None
             if dir_fd is not None:
@@ -96,6 +98,12 @@ def parse_kinds(value: str) -> set[str]:
     if not kinds:
         raise argparse.ArgumentTypeError("at least one ingest kind is required")
     return kinds
+
+
+def _load_checkpoint_file(path: Path) -> dict:
+    if path.exists():
+        return json.loads(path.read_text())
+    return {"done": {}}
 
 
 def _load_manifest() -> dict:
@@ -457,6 +465,392 @@ def ingest_image_asset(machine_slug: str, cat_id: str, f: dict, *, deep: bool = 
     return 1
 
 
+def _machine_record(m: dict) -> dict:
+    return {
+        "slug": m["slug"],
+        "folder": m["folder"],
+        "type": m["type"],
+        "model": m.get("model"),
+        "serial": m.get("serial"),
+        "raw": m["raw"],
+        "path": m["path"],
+        "rel_path": m.get("rel_path"),
+        "customer": m.get("customer"),
+    }
+
+
+def _write_jsonl_record(path: Path, record: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+    with path.open("a", encoding="utf-8") as out:
+        out.write(line)
+        out.write("\n")
+        out.flush()
+        os.fsync(out.fileno())
+
+
+def _stage_base_record(m: dict, cat_id: str, f: dict, kind: str) -> dict:
+    machine_slug = m["slug"]
+    return {
+        "schema": 1,
+        "machine": _machine_record(m),
+        "cat_id": cat_id,
+        "category": f["category"],
+        "doc_id": _id(machine_slug, f["rel"]),
+        "kind": kind,
+        "file": {
+            "name": f["name"],
+            "rel": f["rel"],
+            "path": f["path"],
+            "size": f.get("size"),
+            "category": f["category"],
+        },
+        "fingerprint": _source_fingerprint(f),
+    }
+
+
+def stage_pdf_records(m: dict, cat_id: str, f: dict, output_path: Path, *,
+                      deep: bool = False, skip_vision_if_short: bool = True,
+                      workers: int = 8) -> int:
+    base = _stage_base_record(m, cat_id, f, "pdf")
+    doc_id = base["doc_id"]
+    from proto import resolve_source
+    pages = render_pdf_pages(Path(resolve_source(f["path"])), doc_id)
+    if not pages:
+        raise PDFIngestError("PDF has no sections to stage")
+
+    vision_map: dict[int, str] = {}
+    if workers > 1 and len(pages) > 1:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [
+                pool.submit(_vision_for_page, p, deep, skip_vision_if_short)
+                for p in pages
+            ]
+            for fut in as_completed(futures):
+                page_no, desc = fut.result()
+                vision_map[page_no] = desc
+    else:
+        for p in pages:
+            page_no, desc = _vision_for_page(p, deep, skip_vision_if_short)
+            vision_map[page_no] = desc
+
+    sections = []
+    for p in pages:
+        text = p["text"]
+        vision_desc = vision_map.get(p["page"], "")
+        merged = f"PAGE TEXT:\n{text}\n\nVISION ANALYSIS:\n{vision_desc}".strip()
+        sections.append({
+            "id": _id(doc_id, f"p{p['page']}"),
+            "page": p["page"],
+            "text": text,
+            "vision_desc": vision_desc,
+            "merged": merged,
+            "png_path": p["png_path"],
+        })
+
+    embeddings = generate_embeddings_batch([s["merged"] for s in sections])
+    if len(embeddings) != len(sections):
+        raise PDFIngestError(
+            f"embedding count mismatch: expected {len(sections)}, got {len(embeddings)}"
+        )
+    missing_embeddings = [s["page"] for s, emb in zip(sections, embeddings) if not emb]
+    if missing_embeddings:
+        pages_preview = ", ".join(str(page) for page in missing_embeddings[:5])
+        raise PDFIngestError(
+            f"missing embeddings for {len(missing_embeddings)} section(s), "
+            f"first page(s): {pages_preview}"
+        )
+
+    _write_jsonl_record(output_path, {
+        **base,
+        "record": "document",
+        "expected_sections": len(sections),
+        "ts": time.time(),
+    })
+    for section, emb in zip(sections, embeddings):
+        _write_jsonl_record(output_path, {
+            **base,
+            "record": "manual_section",
+            "section": section,
+            "embedding": emb,
+            "ts": time.time(),
+        })
+    return len(sections)
+
+
+def stage_text_record(m: dict, cat_id: str, f: dict, output_path: Path) -> int:
+    base = _stage_base_record(m, cat_id, f, "text")
+    content = Path(f["path"]).read_text(encoding="utf-8", errors="replace")
+    try:
+        summary = with_retry(summarize_config, f["name"], content)
+    except Exception as e:
+        print(f"      ! summary fail: {e}")
+        summary = ""
+    merged = f"FILE: {f['name']}\n\nSUMMARY:\n{summary}\n\nCONTENT:\n{content[:4000]}"
+    emb = generate_embedding(merged)
+    if not emb:
+        raise RuntimeError("missing text embedding")
+    _write_jsonl_record(output_path, {
+        **base,
+        "record": "config",
+        "config": {
+            "id": _id(base["doc_id"], "config"),
+            "name": f["name"],
+            "content": content[:20000],
+            "summary": summary,
+            "rel_path": f["rel"],
+        },
+        "embedding": emb,
+        "ts": time.time(),
+    })
+    return 1
+
+
+def stage_image_record(m: dict, cat_id: str, f: dict, output_path: Path, *, deep: bool = False) -> int:
+    base = _stage_base_record(m, cat_id, f, "image")
+    try:
+        caption = with_retry(vision_caption_image, f["path"], deep=deep)
+    except Exception as e:
+        print(f"      ! vision fail: {e}")
+        caption = ""
+    merged = f"IMAGE: {f['name']} (category: {f['category']})\n\n{caption}"
+    emb = generate_embedding(merged)
+    if not emb:
+        raise RuntimeError("missing image embedding")
+    _write_jsonl_record(output_path, {
+        **base,
+        "record": "image",
+        "image": {
+            "id": _id(base["doc_id"], "image"),
+            "name": f["name"],
+            "caption": caption,
+            "path": f["path"],
+            "category": f["category"],
+            "rel_path": f["rel"],
+        },
+        "embedding": emb,
+        "ts": time.time(),
+    })
+    return 1
+
+
+def stage_machine(m: dict, cp: dict, output_dir: Path, *, deep: bool = False,
+                  max_pdfs: int | None = None, max_images: int | None = None,
+                  workers: int = 8, img_workers: int = 8,
+                  force: bool = False, kinds: set[str] | None = None):
+    kinds = kinds or SUPPORTED_KINDS
+    slug = m["slug"]
+    output_path = output_dir / f"{slug}.jsonl"
+    done = cp["done"].setdefault(slug, {})
+    categories = {cat: _id(slug, cat) for cat in m["categories"]}
+    print(f"\n=== stage {m['folder']} -> {output_path} ===")
+
+    if "pdf" in kinds:
+        pdfs = m["files"]["pdf"]
+        if max_pdfs is not None:
+            pdfs = pdfs[:max_pdfs]
+        print(f"  PDFs: {len(pdfs)}")
+        for i, f in enumerate(pdfs, start=1):
+            key = f"stage::pdf::{f['rel']}"
+            if _checkpoint_done(done, key, f, force=force):
+                continue
+            print(f"    [{i}/{len(pdfs)}] {f['name']}")
+            t0 = time.time()
+            try:
+                n = stage_pdf_records(
+                    m, categories.get(f["category"]) or _id(slug, f["category"]),
+                    f, output_path, deep=deep, workers=workers,
+                )
+                done[key] = {
+                    "sections": n,
+                    "expected_sections": n,
+                    "ts": time.time(),
+                    "fingerprint": _source_fingerprint(f),
+                }
+                _save_checkpoint(cp, STAGE_CHECKPOINT)
+                print(f"      -> staged {n} sections in {time.time() - t0:.1f}s")
+            except Exception as e:
+                print(f"      ! pdf stage failed: {str(e)[:150]}")
+                done[key] = {
+                    "sections": 0,
+                    "ts": time.time(),
+                    "fingerprint": _source_fingerprint(f),
+                    "err": str(e)[:200],
+                }
+                _save_checkpoint(cp, STAGE_CHECKPOINT)
+
+    if "text" in kinds:
+        texts = m["files"]["text"]
+        print(f"  Configs: {len(texts)}")
+        for i, f in enumerate(texts, start=1):
+            key = f"stage::txt::{f['rel']}"
+            if _checkpoint_done(done, key, f, force=force):
+                continue
+            print(f"    [{i}/{len(texts)}] {f['name']}")
+            try:
+                n = stage_text_record(
+                    m, categories.get(f["category"]) or _id(slug, f["category"]),
+                    f, output_path,
+                )
+                done[key] = {"ok": n, "ts": time.time(), "fingerprint": _source_fingerprint(f)}
+                _save_checkpoint(cp, STAGE_CHECKPOINT)
+            except Exception as e:
+                print(f"      ! text stage failed: {e}")
+                done[key] = {"ok": 0, "ts": time.time(), "fingerprint": _source_fingerprint(f), "err": str(e)[:200]}
+                _save_checkpoint(cp, STAGE_CHECKPOINT)
+
+    if "image" in kinds:
+        imgs = m["files"]["image"]
+        if max_images is not None:
+            imgs = imgs[:max_images]
+        print(f"  Images: {len(imgs)}")
+        for i, f in enumerate(imgs, start=1):
+            key = f"stage::img::{f['rel']}"
+            if _checkpoint_done(done, key, f, force=force):
+                continue
+            print(f"    [{i}/{len(imgs)}] {f['name']}")
+            try:
+                n = stage_image_record(
+                    m, categories.get(f["category"]) or _id(slug, f["category"]),
+                    f, output_path, deep=deep,
+                )
+                done[key] = {"ok": n, "ts": time.time(), "fingerprint": _source_fingerprint(f)}
+                _save_checkpoint(cp, STAGE_CHECKPOINT)
+            except Exception as e:
+                print(f"      ! image stage failed: {e}")
+                done[key] = {"ok": 0, "ts": time.time(), "fingerprint": _source_fingerprint(f), "err": str(e)[:200]}
+                _save_checkpoint(cp, STAGE_CHECKPOINT)
+
+
+def _import_done(cp: dict, key: str, fingerprint: str | None = None) -> bool:
+    entry = cp["done"].get(key)
+    if not entry or entry.get("err"):
+        return False
+    if fingerprint and entry.get("fingerprint") != fingerprint:
+        return False
+    return True
+
+
+def _mark_import_done(cp: dict, checkpoint: Path, key: str, record: dict, extra: dict | None = None):
+    cp["done"][key] = {
+        "ts": time.time(),
+        "fingerprint": record.get("fingerprint"),
+        **(extra or {}),
+    }
+    _save_checkpoint(cp, checkpoint)
+
+
+def import_record(record: dict):
+    machine = record["machine"]
+    f = record["file"]
+    kind = record["kind"]
+    doc_id = record["doc_id"]
+    upsert_machine(machine)
+    cat_id = upsert_category(machine["slug"], record["category"])
+    if record["record"] == "document":
+        upsert_document(machine["slug"], cat_id, f, kind)
+        clear_document_payload(doc_id)
+        return
+    if record["record"] == "manual_section":
+        upsert_document(machine["slug"], cat_id, f, kind)
+        s = record["section"]
+        proto_db.write(
+            """
+            MATCH (d:Document {id: $doc_id})
+            MERGE (s:ManualSection {id: $id})
+            SET s.document_id = $doc_id, s.page = $page,
+                s.text = $text, s.vision_desc = $vision, s.merged = $merged,
+                s.png_path = $png, s.embedding = vecf32($emb)
+            MERGE (d)-[:HAS_SECTION]->(s)
+            """,
+            {
+                "doc_id": doc_id, "id": s["id"], "page": s["page"],
+                "text": s["text"], "vision": s["vision_desc"],
+                "merged": s["merged"], "png": s["png_path"],
+                "emb": record["embedding"],
+            },
+        )
+        return
+    if record["record"] == "config":
+        upsert_document(machine["slug"], cat_id, f, kind)
+        c = record["config"]
+        proto_db.write(
+            """
+            MATCH (d:Document {id: $doc_id})
+            MERGE (c:ConfigFile {id: $id})
+            SET c.name = $name, c.content = $content, c.summary = $summary,
+                c.rel_path = $rel, c.embedding = vecf32($emb)
+            MERGE (d)-[:HAS_CONFIG]->(c)
+            """,
+            {
+                "doc_id": doc_id, "id": c["id"], "name": c["name"],
+                "content": c["content"], "summary": c["summary"],
+                "rel": c["rel_path"], "emb": record["embedding"],
+            },
+        )
+        return
+    if record["record"] == "image":
+        upsert_document(machine["slug"], cat_id, f, kind)
+        i = record["image"]
+        proto_db.write(
+            """
+            MATCH (d:Document {id: $doc_id})
+            MERGE (i:ImageAsset {id: $id})
+            SET i.name = $name, i.caption = $caption, i.path = $path,
+                i.category = $category, i.rel_path = $rel,
+                i.embedding = vecf32($emb)
+            MERGE (d)-[:HAS_IMAGE]->(i)
+            """,
+            {
+                "doc_id": doc_id, "id": i["id"], "name": i["name"],
+                "caption": i["caption"], "path": i["path"],
+                "category": i["category"], "rel": i["rel_path"],
+                "emb": record["embedding"],
+            },
+        )
+        return
+    raise RuntimeError(f"Unsupported staged record type: {record['record']}")
+
+
+def import_staged_records(output_dir: Path, checkpoint: Path, *, sleep_seconds: float = 0.0):
+    cp = _load_checkpoint_file(checkpoint)
+    files = sorted(output_dir.glob("*.jsonl"))
+    print(f"Importing staged Proto records from {output_dir} ({len(files)} files)")
+    imported = 0
+    for path in files:
+        print(f"  {path.name}")
+        with path.open(encoding="utf-8") as fh:
+            for line_no, line in enumerate(fh, start=1):
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                key = f"{path.name}:{line_no}:{record['record']}:{record['doc_id']}"
+                if record["record"] == "manual_section":
+                    key += f":{record['section']['id']}"
+                elif record["record"] == "config":
+                    key += f":{record['config']['id']}"
+                elif record["record"] == "image":
+                    key += f":{record['image']['id']}"
+                if _import_done(cp, key, record.get("fingerprint")):
+                    continue
+                try:
+                    import_record(record)
+                    _mark_import_done(cp, checkpoint, key, record)
+                    imported += 1
+                    if sleep_seconds:
+                        time.sleep(sleep_seconds)
+                except Exception as e:
+                    cp["done"][key] = {
+                        "ts": time.time(),
+                        "fingerprint": record.get("fingerprint"),
+                        "err": str(e)[:300],
+                    }
+                    _save_checkpoint(cp, checkpoint)
+                    print(f"    ! import failed {path.name}:{line_no}: {str(e)[:180]}")
+                    raise
+    print(f"Imported {imported} staged records")
+
+
 def ingest_machine(m: dict, cp: dict, *, deep: bool = False,
                    max_pdfs: int | None = None, max_images: int | None = None,
                    workers: int = 8, img_workers: int = 8,
@@ -573,10 +967,23 @@ def main():
     ap.add_argument("--machine-workers", type=int, default=1, help="Parallel machines")
     ap.add_argument("--force", action="store_true", help="Reprocess files even when checkpoint fingerprints match")
     ap.add_argument("--kinds", type=parse_kinds, default=SUPPORTED_KINDS, help="Comma-separated kinds to ingest: pdf,text,image")
+    ap.add_argument("--stage-output-dir", type=Path, default=None, help="Write extracted records as durable JSONL instead of writing to FalkorDB")
+    ap.add_argument("--import-output-dir", type=Path, default=None, help="Import staged JSONL records into FalkorDB as a single writer")
+    ap.add_argument("--import-checkpoint", type=Path, default=None, help="Checkpoint path for staged JSONL import")
+    ap.add_argument("--import-sleep", type=float, default=0.0, help="Seconds to sleep after each imported staged record")
     args = ap.parse_args()
 
+    if args.import_output_dir:
+        checkpoint = args.import_checkpoint or (args.import_output_dir / "import_checkpoint.json")
+        import_staged_records(args.import_output_dir, checkpoint, sleep_seconds=args.import_sleep)
+        print("\nDone.")
+        print("Stats:")
+        for label, count in proto_db.stats()["nodes"].items():
+            print(f"  {label}: {count}")
+        return
+
     manifest = _load_manifest()
-    cp = _load_checkpoint()
+    cp = _load_checkpoint_file(STAGE_CHECKPOINT) if args.stage_output_dir else _load_checkpoint()
 
     if args.machine:
         targets = [m for m in manifest["machines"] if m["folder"] == args.machine]
@@ -585,20 +992,34 @@ def main():
     else:
         targets = [m for m in manifest["machines"] if m["folder"] in SAMPLE_MACHINES]
 
-    print(f"Targets: {len(targets)} machines (kinds={','.join(sorted(args.kinds))}, "
+    mode = "stage" if args.stage_output_dir else "direct"
+    print(f"Targets: {len(targets)} machines (mode={mode}, kinds={','.join(sorted(args.kinds))}, "
           f"machine_workers={args.machine_workers}, page_workers={args.workers}, "
           f"img_workers={args.img_workers})")
+    if args.stage_output_dir:
+        args.stage_output_dir.mkdir(parents=True, exist_ok=True)
     if args.machine_workers > 1 and len(targets) > 1:
         with ThreadPoolExecutor(max_workers=args.machine_workers) as pool:
-            futs = [
-                pool.submit(
-                    ingest_machine, m, cp, deep=args.deep,
-                    max_pdfs=args.max_pdfs, max_images=args.max_images,
-                    workers=args.workers, img_workers=args.img_workers,
-                    force=args.force, kinds=args.kinds,
-                )
-                for m in targets
-            ]
+            if args.stage_output_dir:
+                futs = [
+                    pool.submit(
+                        stage_machine, m, cp, args.stage_output_dir, deep=args.deep,
+                        max_pdfs=args.max_pdfs, max_images=args.max_images,
+                        workers=args.workers, img_workers=args.img_workers,
+                        force=args.force, kinds=args.kinds,
+                    )
+                    for m in targets
+                ]
+            else:
+                futs = [
+                    pool.submit(
+                        ingest_machine, m, cp, deep=args.deep,
+                        max_pdfs=args.max_pdfs, max_images=args.max_images,
+                        workers=args.workers, img_workers=args.img_workers,
+                        force=args.force, kinds=args.kinds,
+                    )
+                    for m in targets
+                ]
             for fut in as_completed(futs):
                 try:
                     fut.result()
@@ -606,15 +1027,22 @@ def main():
                     print(f"  machine failed: {e}")
     else:
         for m in targets:
-            ingest_machine(m, cp, deep=args.deep,
-                           max_pdfs=args.max_pdfs, max_images=args.max_images,
-                           workers=args.workers, img_workers=args.img_workers,
-                           force=args.force, kinds=args.kinds)
+            if args.stage_output_dir:
+                stage_machine(m, cp, args.stage_output_dir, deep=args.deep,
+                              max_pdfs=args.max_pdfs, max_images=args.max_images,
+                              workers=args.workers, img_workers=args.img_workers,
+                              force=args.force, kinds=args.kinds)
+            else:
+                ingest_machine(m, cp, deep=args.deep,
+                               max_pdfs=args.max_pdfs, max_images=args.max_images,
+                               workers=args.workers, img_workers=args.img_workers,
+                               force=args.force, kinds=args.kinds)
 
     print("\nDone.")
-    print("Stats:")
-    for label, count in proto_db.stats()["nodes"].items():
-        print(f"  {label}: {count}")
+    if not args.stage_output_dir:
+        print("Stats:")
+        for label, count in proto_db.stats()["nodes"].items():
+            print(f"  {label}: {count}")
 
 
 if __name__ == "__main__":

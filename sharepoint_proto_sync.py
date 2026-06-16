@@ -567,6 +567,14 @@ def run_ingest(args: argparse.Namespace):
     command.extend(["--img-workers", str(args.ingest_img_workers)])
     command.extend(["--machine-workers", str(args.ingest_machine_workers)])
     command.extend(["--kinds", args.ingest_kinds])
+    if args.ingest_stage_output_dir:
+        command.extend(["--stage-output-dir", args.ingest_stage_output_dir])
+    if args.ingest_import_output_dir:
+        command.extend(["--import-output-dir", args.ingest_import_output_dir])
+    if args.ingest_import_checkpoint:
+        command.extend(["--import-checkpoint", args.ingest_import_checkpoint])
+    if args.ingest_import_sleep:
+        command.extend(["--import-sleep", str(args.ingest_import_sleep)])
     for value in args.ingest_arg:
         command.append(value)
     run_logged_subprocess(command, ingest_log_path())
@@ -604,6 +612,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--full", action="store_true", help="Ignore saved delta token and rescan the selected library/folder")
     ap.add_argument("--inspect-fit", action="store_true", help="List children and check whether the root matches Proto's machine-folder layout")
     ap.add_argument("--inspect-parent", action="store_true", help="Also inspect the parent of the selected root path")
+    ap.add_argument("--skip-mirror", action="store_true", help="Skip SharePoint mirror/manifest work; useful for staged import jobs")
     ap.add_argument("--no-scan", action="store_true", help="Do not rebuild proto manifest after mirroring")
     ap.add_argument("--apply-schema", action="store_true", help="Apply Proto graph indexes before running ingest")
     ap.add_argument("--run-ingest", action="store_true", help="Run python -m proto.ingest after mirroring")
@@ -613,6 +622,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--ingest-img-workers", type=int, default=int(env("PROTO_INGEST_IMG_WORKERS", "4")))
     ap.add_argument("--ingest-machine-workers", type=int, default=int(env("PROTO_INGEST_MACHINE_WORKERS", "1")))
     ap.add_argument("--ingest-kinds", default=env("PROTO_INGEST_KINDS", "pdf,text,image"))
+    ap.add_argument("--ingest-stage-output-dir", default=env("PROTO_STAGE_OUTPUT_DIR"))
+    ap.add_argument("--ingest-import-output-dir", default=env("PROTO_IMPORT_OUTPUT_DIR"))
+    ap.add_argument("--ingest-import-checkpoint", default=env("PROTO_IMPORT_CHECKPOINT"))
+    ap.add_argument("--ingest-import-sleep", type=float, default=float(env("PROTO_IMPORT_SLEEP", "0")))
     ap.add_argument("--ingest-arg", action="append", default=[], help="Additional raw argument for proto.ingest")
     return ap
 
@@ -625,6 +638,12 @@ def main():
         args.site_path = args.site_path or parts.site_path
         args.drive_name = args.drive_name or parts.drive_name
         args.root_path = args.root_path or parts.root_path
+
+    if args.skip_mirror:
+        print("SharePoint mirror: skipped")
+        if args.run_ingest:
+            run_ingest(args)
+        return
 
     client = GraphClient.from_client_credentials(
         required(args.tenant_id, "SHAREPOINT_TENANT_ID"),

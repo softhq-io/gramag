@@ -4,6 +4,8 @@ import os
 import tempfile
 import unittest
 from argparse import Namespace
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 import sharepoint_proto_sync as sync
@@ -222,6 +224,10 @@ class SharePointProtoSyncTests(unittest.TestCase):
                     ingest_img_workers=1,
                     ingest_machine_workers=1,
                     ingest_kinds="pdf,text",
+                    ingest_stage_output_dir=None,
+                    ingest_import_output_dir=None,
+                    ingest_import_checkpoint=None,
+                    ingest_import_sleep=0,
                     ingest_arg=[],
                 )
             )
@@ -232,6 +238,58 @@ class SharePointProtoSyncTests(unittest.TestCase):
             self.assertEqual(command[command.index("--kinds") + 1], "pdf,text")
         finally:
             sync.run_logged_subprocess = original_run
+
+    def test_run_ingest_passes_stage_import_controls(self):
+        calls = []
+        original_run = sync.run_logged_subprocess
+        try:
+            sync.run_logged_subprocess = lambda command, log_path: calls.append((command, log_path))
+
+            sync.run_ingest(
+                Namespace(
+                    apply_schema=False,
+                    ingest_all=False,
+                    ingest_force=False,
+                    ingest_workers=1,
+                    ingest_img_workers=1,
+                    ingest_machine_workers=1,
+                    ingest_kinds="pdf,text",
+                    ingest_stage_output_dir="/data/proto-stage/pdf",
+                    ingest_import_output_dir="/data/proto-stage/pdf",
+                    ingest_import_checkpoint="/data/proto-stage/pdf/import.json",
+                    ingest_import_sleep=0.05,
+                    ingest_arg=[],
+                )
+            )
+
+            command, _log_path = calls[0]
+            self.assertEqual(command[command.index("--stage-output-dir") + 1], "/data/proto-stage/pdf")
+            self.assertEqual(command[command.index("--import-output-dir") + 1], "/data/proto-stage/pdf")
+            self.assertEqual(command[command.index("--import-checkpoint") + 1], "/data/proto-stage/pdf/import.json")
+            self.assertEqual(command[command.index("--import-sleep") + 1], "0.05")
+        finally:
+            sync.run_logged_subprocess = original_run
+
+    def test_skip_mirror_runs_ingest_without_graph_client(self):
+        calls = []
+        original_argv = sync.sys.argv
+        original_run = sync.run_ingest
+        original_client = sync.GraphClient.from_client_credentials
+        try:
+            sync.sys.argv = ["sharepoint_proto_sync.py", "--skip-mirror", "--run-ingest"]
+            sync.run_ingest = lambda args: calls.append(args)
+            sync.GraphClient.from_client_credentials = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("Graph auth should be skipped")
+            )
+
+            with redirect_stdout(StringIO()):
+                sync.main()
+
+            self.assertEqual(len(calls), 1)
+        finally:
+            sync.sys.argv = original_argv
+            sync.run_ingest = original_run
+            sync.GraphClient.from_client_credentials = original_client
 
     def test_safe_target_blocks_path_escape(self):
         with tempfile.TemporaryDirectory() as tmp:
