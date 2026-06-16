@@ -42,6 +42,13 @@ def env(name: str, default: str | None = None) -> str | None:
     return value if value not in (None, "") else default
 
 
+def env_bool(name: str, default: bool = False) -> bool:
+    value = env(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def required(value: str | None, name: str) -> str:
     if not value:
         raise SystemExit(f"Missing required setting: {name}")
@@ -612,7 +619,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--full", action="store_true", help="Ignore saved delta token and rescan the selected library/folder")
     ap.add_argument("--inspect-fit", action="store_true", help="List children and check whether the root matches Proto's machine-folder layout")
     ap.add_argument("--inspect-parent", action="store_true", help="Also inspect the parent of the selected root path")
-    ap.add_argument("--skip-mirror", action="store_true", help="Skip SharePoint mirror/manifest work; useful for staged import jobs")
+    ap.add_argument("--skip-mirror", action="store_true", default=env_bool("SHAREPOINT_SKIP_MIRROR"), help="Skip SharePoint mirror/manifest work; useful for staged import jobs")
     ap.add_argument("--no-scan", action="store_true", help="Do not rebuild proto manifest after mirroring")
     ap.add_argument("--apply-schema", action="store_true", help="Apply Proto graph indexes before running ingest")
     ap.add_argument("--run-ingest", action="store_true", help="Run python -m proto.ingest after mirroring")
