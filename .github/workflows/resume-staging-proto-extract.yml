@@ -1,0 +1,336 @@
+name: Resume Staging Proto Extract
+
+on:
+  schedule:
+    - cron: "35 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: "Extraction phase to monitor and resume"
+        required: true
+        default: "birkhaeuser-pdf"
+        type: choice
+        options:
+          - birkhaeuser-pdf
+      mode:
+        description: "Which idle jobs to restart"
+        required: true
+        default: "failed-or-missing"
+        type: choice
+        options:
+          - failed-or-missing
+          - all
+      dry_run:
+        description: "Plan only; do not snapshot or start jobs"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: staging-proto-extract-resume
+  cancel-in-progress: false
+
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    env:
+      RESOURCE_GROUP: gramag-staging-rg
+      STORAGE_ACCOUNT: gramagstagingjcf0gh
+      FALKORDB_APP: staging-gramag-falkordb
+      FALKORDB_CONTAINER: falkordb
+      RETENTION_DAYS: "14"
+      MIN_SNAPSHOTS_PER_SHARE: "8"
+      PHASE: ${{ github.event.inputs.phase || 'birkhaeuser-pdf' }}
+      MODE: ${{ github.event.inputs.mode || 'failed-or-missing' }}
+      DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Plan staged extract resume
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$PHASE" in
+            birkhaeuser-pdf)
+              jobs=(
+                staging-sp-proto-birk01-pdf
+                staging-sp-proto-birk02-pdf
+                staging-sp-proto-birk03-pdf
+                staging-sp-proto-birk04-pdf
+              )
+              ;;
+            *)
+              echo "Unsupported phase: $PHASE"
+              exit 1
+              ;;
+          esac
+
+          : > restart_jobs.txt
+          active_count=0
+          restart_count=0
+          succeeded_count=0
+
+          echo "Checking latest executions for phase=$PHASE mode=$MODE"
+
+          for job in "${jobs[@]}"; do
+            latest="$(
+              az containerapp job execution list \
+                --resource-group "$RESOURCE_GROUP" \
+                --name "$job" \
+                --query 'sort_by(@,&properties.startTime)[-1]' \
+                --output json
+            )"
+
+            if [ "$latest" = "null" ] || [ -z "$latest" ]; then
+              execution="none"
+              status="Missing"
+              start_time=""
+              end_time=""
+            else
+              execution="$(jq -r '.name // "unknown"' <<<"$latest")"
+              status="$(jq -r '.properties.status // "Unknown"' <<<"$latest")"
+              start_time="$(jq -r '.properties.startTime // ""' <<<"$latest")"
+              end_time="$(jq -r '.properties.endTime // ""' <<<"$latest")"
+            fi
+
+            echo "$job latest=$execution status=$status start=$start_time end=$end_time"
+
+            case "$status" in
+              Running|Processing|Pending)
+                active_count=$((active_count + 1))
+                ;;
+              Succeeded)
+                succeeded_count=$((succeeded_count + 1))
+                if [ "$MODE" = "all" ]; then
+                  printf '%s\n' "$job" >> restart_jobs.txt
+                  restart_count=$((restart_count + 1))
+                fi
+                ;;
+              Failed|Stopped|Missing)
+                printf '%s\n' "$job" >> restart_jobs.txt
+                restart_count=$((restart_count + 1))
+                ;;
+              *)
+                echo "Unknown execution status for $job: $status"
+                exit 1
+                ;;
+            esac
+          done
+
+          if [ "$active_count" -gt 0 ]; then
+            echo "At least one extraction shard is still active; not snapshotting or restarting."
+            : > restart_jobs.txt
+            restart_count=0
+          elif [ "$restart_count" -eq 0 ]; then
+            echo "No failed or missing shards to resume."
+          else
+            echo "Will resume $(wc -l < restart_jobs.txt | tr -d ' ') idle shard(s):"
+            cat restart_jobs.txt
+          fi
+
+          {
+            echo "active_count=$active_count"
+            echo "restart_count=$restart_count"
+            echo "succeeded_count=$succeeded_count"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Flush and verify FalkorDB persistence
+        if: steps.plan.outputs.restart_count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry_run=true; skipping persistence flush"
+            exit 0
+          fi
+
+          clean_exec_output() {
+            sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g' |
+            grep -Ev '^(INFO:|Use ctrl|Disconnecting)' |
+            sed '/^[[:space:]]*$/d'
+          }
+
+          run_redis() {
+            local output
+            local status
+            for attempt in {1..5}; do
+              set +e
+              output="$(script -q -e -c "az containerapp exec --resource-group '$RESOURCE_GROUP' --name '$FALKORDB_APP' --container '$FALKORDB_CONTAINER' --command 'redis-cli $*'" /dev/null 2>&1)"
+              status=$?
+              set -e
+              if [ "$status" -eq 0 ]; then
+                printf '%s\n' "$output" | clean_exec_output
+                return 0
+              fi
+              echo "redis-cli $* failed via containerapp exec (attempt $attempt/5)" >&2
+              printf '%s\n' "$output" >&2
+              sleep $((attempt * 5))
+            done
+            return 1
+          }
+
+          redis_config_value() {
+            run_redis "CONFIG GET $1" |
+            sed -E 's/^[[:space:]]*[0-9]+[)] //; s/^"//; s/"$//; s/\r$//' |
+            tail -n 1
+          }
+
+          require_config() {
+            local key="$1"
+            local expected="$2"
+            local value
+            value="$(redis_config_value "$key")"
+            if [ "$value" != "$expected" ]; then
+              echo "Unexpected FalkorDB Redis config $key=$value, expected $expected"
+              exit 1
+            fi
+          }
+
+          require_config appendonly yes
+          require_config appendfsync everysec
+          require_config dir /var/lib/falkordb/data
+
+          echo "Requesting FalkorDB BGSAVE before resuming failed extraction shards"
+          bgsave_output="$(run_redis BGSAVE || true)"
+          echo "$bgsave_output"
+          case "$bgsave_output" in
+            *"Background saving started"*|*"Background saving already in progress"*) ;;
+            *)
+              echo "Unexpected BGSAVE response"
+              exit 1
+              ;;
+          esac
+
+          for attempt in {1..60}; do
+            info="$(run_redis "INFO persistence")"
+            save_in_progress="$(awk -F: '/^rdb_bgsave_in_progress:/ {gsub(/\r/, "", $2); print $2}' <<<"$info")"
+            rewrite_in_progress="$(awk -F: '/^aof_rewrite_in_progress:/ {gsub(/\r/, "", $2); print $2}' <<<"$info")"
+            rewrite_scheduled="$(awk -F: '/^aof_rewrite_scheduled:/ {gsub(/\r/, "", $2); print $2}' <<<"$info")"
+            last_bgsave_status="$(awk -F: '/^rdb_last_bgsave_status:/ {gsub(/\r/, "", $2); print $2}' <<<"$info")"
+            last_aof_status="$(awk -F: '/^aof_last_bgrewrite_status:/ {gsub(/\r/, "", $2); print $2}' <<<"$info")"
+
+            if [ "${save_in_progress:-1}" = "0" ] &&
+               [ "${rewrite_in_progress:-1}" = "0" ] &&
+               [ "${rewrite_scheduled:-1}" = "0" ] &&
+               [ "${last_bgsave_status:-}" = "ok" ] &&
+               [ "${last_aof_status:-}" = "ok" ]; then
+              echo "FalkorDB persistence is clean for snapshotting"
+              exit 0
+            fi
+
+            echo "Waiting for persistence to settle (attempt $attempt/60)"
+            sleep 5
+          done
+
+          echo "FalkorDB persistence did not settle before snapshot timeout"
+          exit 1
+
+      - name: Snapshot staging Azure File shares
+        if: steps.plan.outputs.restart_count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry_run=true; skipping Azure File snapshots"
+            exit 0
+          fi
+
+          key="$(az storage account keys list \
+            --resource-group "$RESOURCE_GROUP" \
+            --account-name "$STORAGE_ACCOUNT" \
+            --query '[0].value' \
+            --output tsv)"
+
+          for share in falkordb-data app-data; do
+            echo "Creating snapshot for $share"
+            az storage share snapshot \
+              --account-name "$STORAGE_ACCOUNT" \
+              --account-key "$key" \
+              --name "$share" \
+              --output table
+          done
+
+      - name: Prune old staging snapshots
+        if: steps.plan.outputs.restart_count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry_run=true; skipping snapshot pruning"
+            exit 0
+          fi
+
+          key="$(az storage account keys list \
+            --resource-group "$RESOURCE_GROUP" \
+            --account-name "$STORAGE_ACCOUNT" \
+            --query '[0].value' \
+            --output tsv)"
+          cutoff_epoch="$(date -u -d "$RETENTION_DAYS days ago" +%s)"
+
+          for share in falkordb-data app-data; do
+            mapfile -t snapshots < <(
+              az storage share list \
+                --account-name "$STORAGE_ACCOUNT" \
+                --account-key "$key" \
+                --include-snapshots \
+                --query "[?name=='$share' && snapshot != null].snapshot" \
+                --output tsv |
+              sort -r
+            )
+
+            snapshot_index=0
+            for snapshot in "${snapshots[@]}"; do
+              [ -n "$snapshot" ] || continue
+              snapshot_index=$((snapshot_index + 1))
+              if [ "$snapshot_index" -le "$MIN_SNAPSHOTS_PER_SHARE" ]; then
+                continue
+              fi
+              snapshot_epoch="$(date -u -d "$snapshot" +%s)"
+              if [ "$snapshot_epoch" -lt "$cutoff_epoch" ]; then
+                echo "Deleting $share snapshot $snapshot"
+                az storage share delete \
+                  --account-name "$STORAGE_ACCOUNT" \
+                  --account-key "$key" \
+                  --name "$share" \
+                  --snapshot "$snapshot" \
+                  --yes
+              fi
+            done
+          done
+
+      - name: Resume failed staged extraction shards
+        if: steps.plan.outputs.restart_count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry_run=true; planned restarts:"
+            cat restart_jobs.txt
+            exit 0
+          fi
+
+          while IFS= read -r job; do
+            [ -n "$job" ] || continue
+            echo "Starting $job"
+            az containerapp job start \
+              --name "$job" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query name \
+              --output tsv
+          done < restart_jobs.txt
