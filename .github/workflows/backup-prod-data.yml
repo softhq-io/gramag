@@ -77,7 +77,8 @@ jobs:
 
           redis_config_value() {
             run_redis "CONFIG GET $1" |
-            sed -E 's/\r$//; s/^[[:space:]]*[0-9]+[)] //; s/^"//; s/"$//' |
+            tr -d '\r"' |
+            sed -E 's/^[[:space:]]*[0-9]+[)] //' |
             tail -n 1
           }
 
