@@ -22,9 +22,12 @@ class ProtoGraphConnection:
 
     def connect(self):
         if not self.graph:
+            socket_timeout = float(os.getenv("PROTO_DB_SOCKET_TIMEOUT", "120"))
+            socket_connect_timeout = float(os.getenv("PROTO_DB_SOCKET_CONNECT_TIMEOUT", "15"))
             self._db = FalkorDB(
                 host=self.host, port=self.port,
-                socket_timeout=30, socket_connect_timeout=10,
+                socket_timeout=socket_timeout,
+                socket_connect_timeout=socket_connect_timeout,
             )
             self.graph = self._db.select_graph(self.graph_name)
         return self.graph
@@ -57,9 +60,9 @@ class ProtoGraphConnection:
 
     def _with_retry(self, fn, max_retries: int | None = None):
         if max_retries is None:
-            max_retries = int(os.getenv("PROTO_DB_MAX_RETRIES", "8"))
+            max_retries = int(os.getenv("PROTO_DB_MAX_RETRIES", "12"))
         base_delay = float(os.getenv("PROTO_DB_RETRY_BASE_DELAY", "1.5"))
-        max_delay = float(os.getenv("PROTO_DB_RETRY_MAX_DELAY", "30"))
+        max_delay = float(os.getenv("PROTO_DB_RETRY_MAX_DELAY", "60"))
         last = None
         for i in range(max_retries + 1):
             try:

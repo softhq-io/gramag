@@ -740,19 +740,25 @@ def _mark_import_done(cp: dict, checkpoint: Path, key: str, record: dict, extra:
     _save_checkpoint(cp, checkpoint)
 
 
-def import_record(record: dict):
+def import_record(record: dict, known_docs: set[str] | None = None):
     machine = record["machine"]
     f = record["file"]
     kind = record["kind"]
     doc_id = record["doc_id"]
-    upsert_machine(machine)
-    cat_id = upsert_category(machine["slug"], record["category"])
+    known_docs = known_docs if known_docs is not None else set()
     if record["record"] == "document":
+        upsert_machine(machine)
+        cat_id = upsert_category(machine["slug"], record["category"])
         upsert_document(machine["slug"], cat_id, f, kind)
         clear_document_payload(doc_id)
+        known_docs.add(doc_id)
         return
     if record["record"] == "manual_section":
-        upsert_document(machine["slug"], cat_id, f, kind)
+        if doc_id not in known_docs:
+            upsert_machine(machine)
+            cat_id = upsert_category(machine["slug"], record["category"])
+            upsert_document(machine["slug"], cat_id, f, kind)
+            known_docs.add(doc_id)
         s = record["section"]
         proto_db.write(
             """
@@ -772,6 +778,8 @@ def import_record(record: dict):
         )
         return
     if record["record"] == "config":
+        upsert_machine(machine)
+        cat_id = upsert_category(machine["slug"], record["category"])
         upsert_document(machine["slug"], cat_id, f, kind)
         c = record["config"]
         proto_db.write(
@@ -790,6 +798,8 @@ def import_record(record: dict):
         )
         return
     if record["record"] == "image":
+        upsert_machine(machine)
+        cat_id = upsert_category(machine["slug"], record["category"])
         upsert_document(machine["slug"], cat_id, f, kind)
         i = record["image"]
         proto_db.write(
@@ -817,6 +827,7 @@ def import_staged_records(output_dir: Path, checkpoint: Path, *, sleep_seconds: 
     files = sorted(output_dir.glob("*.jsonl"))
     print(f"Importing staged Proto records from {output_dir} ({len(files)} files)")
     imported = 0
+    known_docs: set[str] = set()
     for path in files:
         print(f"  {path.name}")
         with path.open(encoding="utf-8") as fh:
@@ -832,9 +843,11 @@ def import_staged_records(output_dir: Path, checkpoint: Path, *, sleep_seconds: 
                 elif record["record"] == "image":
                     key += f":{record['image']['id']}"
                 if _import_done(cp, key, record.get("fingerprint")):
+                    if record["record"] == "document":
+                        known_docs.add(record["doc_id"])
                     continue
                 try:
-                    import_record(record)
+                    import_record(record, known_docs)
                     _mark_import_done(cp, checkpoint, key, record)
                     imported += 1
                     if sleep_seconds:

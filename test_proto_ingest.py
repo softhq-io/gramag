@@ -277,6 +277,75 @@ class ProtoIngestTests(unittest.TestCase):
             self.assertEqual(len(first_checkpoint["done"]), 2)
             self.assertEqual(calls.count(("clear", doc_id)), 1)
             self.assertEqual(calls.count(("write", ingest._id(doc_id, "p1"))), 1)
+            self.assertEqual(calls.count(("document", "manual.pdf", "pdf")), 1)
+        finally:
+            for name, value in originals.items():
+                setattr(ingest, name, value)
+
+    def test_import_staged_records_resumed_section_ensures_document_once(self):
+        calls = []
+        originals = {
+            "upsert_machine": ingest.upsert_machine,
+            "upsert_category": ingest.upsert_category,
+            "upsert_document": ingest.upsert_document,
+            "proto_db": ingest.proto_db,
+        }
+
+        class FakeDb:
+            def write(self, query, params):
+                calls.append(("write", params["id"]))
+
+        try:
+            ingest.upsert_machine = lambda machine: calls.append(("machine", machine["slug"])) or machine["slug"]
+            ingest.upsert_category = lambda slug, category: calls.append(("category", category)) or f"{slug}:{category}"
+            ingest.upsert_document = lambda slug, cat_id, f, kind: calls.append(("document", f["rel"], kind)) or ingest._id(slug, f["rel"])
+            ingest.proto_db = FakeDb()
+
+            with tempfile.TemporaryDirectory() as tmp:
+                output_dir = Path(tmp)
+                checkpoint = output_dir / "import_checkpoint.json"
+                doc_id = ingest._id("machine", "manual.pdf")
+                staged = output_dir / "machine.jsonl"
+                staged.write_text(
+                    "\n".join(
+                        json.dumps({
+                            "schema": 1,
+                            "machine": {
+                                "slug": "machine",
+                                "folder": "Machine",
+                                "type": "Falzanlage",
+                                "model": None,
+                                "serial": None,
+                                "raw": "Machine",
+                                "path": "/source/Machine",
+                            },
+                            "category": "Manuals",
+                            "doc_id": doc_id,
+                            "kind": "pdf",
+                            "file": {"name": "manual.pdf", "rel": "manual.pdf", "path": "manual.pdf", "category": "Manuals"},
+                            "fingerprint": "fingerprint",
+                            "record": "manual_section",
+                            "section": {
+                                "id": ingest._id(doc_id, f"p{page}"),
+                                "page": page,
+                                "text": "page",
+                                "vision_desc": "",
+                                "merged": "page",
+                                "png_path": f"p{page}.png",
+                            },
+                            "embedding": [0.1],
+                        })
+                        for page in (1, 2)
+                    ) + "\n",
+                    encoding="utf-8",
+                )
+
+                with redirect_stdout(StringIO()):
+                    ingest.import_staged_records(output_dir, checkpoint)
+
+            self.assertEqual(calls.count(("document", "manual.pdf", "pdf")), 1)
+            self.assertEqual(calls.count(("write", ingest._id(doc_id, "p1"))), 1)
+            self.assertEqual(calls.count(("write", ingest._id(doc_id, "p2"))), 1)
         finally:
             for name, value in originals.items():
                 setattr(ingest, name, value)
