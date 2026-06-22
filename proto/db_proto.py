@@ -34,6 +34,10 @@ class ProtoGraphConnection:
         self.graph = None
         return self.connect()
 
+    def reset(self):
+        self._db = None
+        self.graph = None
+
     def _is_retryable_error(self, err: Exception) -> bool:
         msg = str(err).lower()
         return any(
@@ -72,7 +76,7 @@ class ProtoGraphConnection:
                     flush=True,
                 )
                 time.sleep(delay)
-                self.reconnect()
+                self.reset()
             except Exception as e:
                 if self._is_retryable_error(e):
                     last = e
@@ -86,7 +90,7 @@ class ProtoGraphConnection:
                         flush=True,
                     )
                     time.sleep(delay)
-                    self.reconnect()
+                    self.reset()
                 else:
                     raise
         raise last

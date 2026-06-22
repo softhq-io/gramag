@@ -287,6 +287,24 @@ class ProtoIngestTests(unittest.TestCase):
         self.assertTrue(db._is_retryable_error(RuntimeError("Connection closed by server")))
         self.assertFalse(db._is_retryable_error(RuntimeError("syntax error")))
 
+    def test_proto_db_retry_resets_without_reconnect_escape(self):
+        db = ProtoGraphConnection()
+        attempts = []
+        resets = []
+
+        def flaky_query():
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise RuntimeError("Timeout reading from socket")
+            return "ok"
+
+        db.reset = lambda: resets.append(1)
+        db.reconnect = lambda: (_ for _ in ()).throw(AssertionError("reconnect should not run during retry"))
+
+        self.assertEqual(db._with_retry(flaky_query, max_retries=1), "ok")
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(len(resets), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
