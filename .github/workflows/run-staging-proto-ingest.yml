@@ -13,10 +13,23 @@ on:
           - pdf-import
           - image
           - image-import
+          - batch-pdf-text
+          - batch-pdf-import
+          - batch-image
+          - batch-image-import
           - custom
       job_name:
         description: "Custom Container App Job name when phase=custom"
         required: false
+        type: string
+      batch_prefix:
+        description: "Batch shard key prefix, e.g. clients-a for phase=batch-*"
+        required: false
+        type: string
+      batch_count:
+        description: "Number of extraction shards for phase=batch-pdf-text or phase=batch-image"
+        required: false
+        default: "16"
         type: string
 
 permissions:
@@ -39,7 +52,11 @@ jobs:
         env:
           PHASE: ${{ inputs.phase }}
           JOB_NAME: ${{ inputs.job_name }}
+          BATCH_PREFIX: ${{ inputs.batch_prefix }}
+          BATCH_COUNT: ${{ inputs.batch_count }}
         run: |
+          set -euo pipefail
+
           if [ "$PHASE" = "pdf-text" ]; then
             jobs=(
               staging-sp-proto-birk01-pdf
@@ -62,6 +79,38 @@ jobs:
             jobs=(
               staging-sp-proto-birk-import-img
             )
+          elif [ "$PHASE" = "batch-pdf-text" ]; then
+            if [ -z "$BATCH_PREFIX" ]; then
+              echo "batch_prefix is required for $PHASE"
+              exit 1
+            fi
+            jobs=()
+            for i in $(seq 1 "$BATCH_COUNT"); do
+              shard="$(printf '%02d' "$i")"
+              jobs+=("staging-sp-proto-${BATCH_PREFIX}${shard}-pdf")
+            done
+          elif [ "$PHASE" = "batch-image" ]; then
+            if [ -z "$BATCH_PREFIX" ]; then
+              echo "batch_prefix is required for $PHASE"
+              exit 1
+            fi
+            jobs=()
+            for i in $(seq 1 "$BATCH_COUNT"); do
+              shard="$(printf '%02d' "$i")"
+              jobs+=("staging-sp-proto-${BATCH_PREFIX}${shard}-img")
+            done
+          elif [ "$PHASE" = "batch-pdf-import" ]; then
+            if [ -z "$BATCH_PREFIX" ]; then
+              echo "batch_prefix is required for $PHASE"
+              exit 1
+            fi
+            jobs=("staging-sp-proto-${BATCH_PREFIX}-import-pdf")
+          elif [ "$PHASE" = "batch-image-import" ]; then
+            if [ -z "$BATCH_PREFIX" ]; then
+              echo "batch_prefix is required for $PHASE"
+              exit 1
+            fi
+            jobs=("staging-sp-proto-${BATCH_PREFIX}-import-img")
           elif [ "$PHASE" = "custom" ] && [ -n "$JOB_NAME" ]; then
             jobs=("$JOB_NAME")
           else

@@ -155,6 +155,10 @@ The sync stores the Microsoft Graph delta token in
 `$PROTO_CACHE_DIR/sharepoint_delta_state.json` by default. Use `--full` to
 ignore that token and rescan the selected library or folder.
 
+For the current staged, sharded SharePoint ingest process, including safety
+snapshots, import phases, monitoring commands, and all-client scaling rules, see
+[Proto SharePoint Ingest Runbook](docs/proto-sharepoint-ingest.md).
+
 ## Frontend
 
 ```bash
