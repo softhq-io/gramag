@@ -2405,12 +2405,44 @@ body {
 
 .proto2-loading-block { padding: 24px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; color: var(--text-secondary); margin-top: 14px; }
 
+.proto-chat-shell { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 14px; align-items: start; }
+.proto-chat-history { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 12px; max-height: 64vh; overflow: auto; }
+.proto-chat-history-title { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+.proto-chat-empty { font-size: 12px; color: var(--text-secondary); line-height: 1.5; padding: 8px 2px; }
+.proto-chat-history button { width: 100%; text-align: left; background: transparent; border: 1px solid transparent; color: var(--text-primary); border-radius: 7px; padding: 9px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.proto-chat-history button:hover { background: var(--bg-tertiary); }
+.proto-chat-history button.active { background: #1b2635; border-color: var(--accent-blue); }
+.proto-chat-history .title { font-size: 12px; font-weight: 600; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proto-chat-history .meta { font-size: 10px; color: var(--text-secondary); }
+.proto-chat-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.proto-chat-thread { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 14px; min-height: 320px; display: flex; flex-direction: column; gap: 12px; }
+.proto-chat-start { color: var(--text-secondary); font-size: 13px; padding: 28px; text-align: center; border: 1px dashed var(--border); border-radius: 8px; }
+.proto-chat-message { max-width: min(860px, 92%); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.proto-chat-message.user { align-self: flex-end; background: #15233a; border-color: #28476f; }
+.proto-chat-message.assistant { align-self: flex-start; background: var(--bg-primary); }
+.proto-chat-message.pending { color: var(--text-secondary); }
+.proto-chat-message-meta { display: flex; justify-content: space-between; gap: 14px; color: var(--text-secondary); font-size: 10px; margin-bottom: 7px; }
+.proto-chat-user-text { white-space: pre-wrap; font-size: 14px; line-height: 1.55; }
+.proto-chat-composer { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: end; }
+.proto-chat-composer textarea { width: 100%; resize: vertical; min-height: 44px; max-height: 150px; background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-primary); padding: 10px 12px; border-radius: 8px; font-size: 14px; line-height: 1.45; outline: none; font-family: inherit; }
+.proto-chat-composer textarea:focus { border-color: var(--accent-blue); }
+.proto-chat-composer button { background: var(--accent-blue); color: #fff; border: 0; padding: 11px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+.proto-chat-composer button:disabled { opacity: 0.5; cursor: not-allowed; }
+.proto-chat-composer .deep { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--text-secondary); cursor: pointer; padding-bottom: 10px; white-space: nowrap; }
+.proto-chat-evidence { margin-top: 14px; }
+.proto-chat-evidence-title { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+
 @media (max-width: 880px) {
   .proto2-section-row { align-items: stretch; }
   .proto2-filters { width: 100%; align-items: stretch; }
   .proto2-filter-row { align-items: flex-start; }
   .proto2-customer-picker { width: 100%; }
   .proto2-machine-hero { grid-template-columns: 1fr; }
+  .proto-chat-shell { grid-template-columns: 1fr; }
+  .proto-chat-history { max-height: 180px; }
+  .proto-chat-composer { grid-template-columns: 1fr; }
+  .proto-chat-composer .deep { padding-bottom: 0; }
+  .proto-chat-message { max-width: 100%; }
 }
 
 /* Thumbnail hover zoom — preview when hovering on hit card thumbnail */

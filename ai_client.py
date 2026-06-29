@@ -151,6 +151,21 @@ def vision_chat(
     )
 
 
+def vision_chat_messages(
+    messages: list[dict],
+    *,
+    temperature: float | None = 0.1,
+    max_tokens: int = 2000,
+    deployment: str | None = None,
+) -> str:
+    return _chat_completion(
+        messages=messages,
+        model=deployment or AZURE_OPENAI_VISION_DEPLOYMENT,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
 def embed_one(text: str, *, input_type: str | None = None) -> list[float]:
     return embed_batch([text], input_type=input_type)[0]
 

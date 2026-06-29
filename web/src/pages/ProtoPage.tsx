@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { askProto, getCustomerOverview, getProtoSection } from '../api/proto'
-import type { CustomerOverview, ProtoAnswerResponse, ProtoHit } from '../api/proto'
+import {
+  createProtoChat,
+  getCustomerOverview,
+  getProtoChat,
+  getProtoSection,
+  listProtoChats,
+  sendProtoChatMessage,
+} from '../api/proto'
+import type {
+  CustomerOverview,
+  ProtoChatMessage,
+  ProtoChatSession,
+  ProtoHit,
+} from '../api/proto'
 
 type Mode = 'site' | 'machine' | 'ask'
 type ProtoSectionDetail = Awaited<ReturnType<typeof getProtoSection>>
@@ -12,7 +24,10 @@ export function ProtoPage() {
   const [query, setQuery] = useState('')
   const [askedQuery, setAskedQuery] = useState('')
   const [loading, setLoading] = useState(false)
-  const [response, setResponse] = useState<ProtoAnswerResponse | null>(null)
+  const [chatSessions, setChatSessions] = useState<ProtoChatSession[]>([])
+  const [activeChat, setActiveChat] = useState<ProtoChatSession | null>(null)
+  const [chatMessages, setChatMessages] = useState<ProtoChatMessage[]>([])
+  const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
   const [deep, setDeep] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [sectionDetail, setSectionDetail] = useState<ProtoSectionDetail | null>(null)
@@ -61,14 +76,33 @@ export function ProtoPage() {
   function pickMachine(slug: string) {
     setSelected(slug)
     setMode('machine')
-    setResponse(null)
+    setActiveChat(null)
+    setChatMessages([])
+    setSelectedAssistantId(null)
     setSectionDetail(null)
+    listProtoChats({ machine_slug: slug })
+      .then(async (sessions) => {
+        setChatSessions(sessions)
+        const latest = sessions[0]
+        if (!latest) return
+        const detail = await getProtoChat(latest.id)
+        setActiveChat(detail.session)
+        setChatMessages(detail.messages)
+        const latestAssistant = [...detail.messages]
+          .reverse()
+          .find((m) => m.role === 'assistant')
+        setSelectedAssistantId(latestAssistant?.id ?? null)
+      })
+      .catch(console.error)
   }
 
   function backToSite() {
     setSelected(null)
     setMode('site')
-    setResponse(null)
+    setActiveChat(null)
+    setChatMessages([])
+    setChatSessions([])
+    setSelectedAssistantId(null)
     setSectionDetail(null)
   }
 
@@ -78,18 +112,64 @@ export function ProtoPage() {
     setQuery(text)
     setAskedQuery(text)
     setLoading(true)
-    setResponse(null)
     setSectionDetail(null)
     setActiveCite(null)
     setMode('ask')
     try {
-      const r = await askProto({
-        query: text,
-        machine_slug: selected,
-        customer: selected ? null : kunde === 'Alle' ? null : kunde,
+      const customer = selected
+        ? selMachine?.customer ?? null
+        : kunde === 'Alle' ? null : kunde
+      let session = activeChat
+      let createdNewSession = false
+      if (
+        !session ||
+        (session.machine_slug ?? null) !== selected ||
+        (session.customer ?? null) !== customer
+      ) {
+        session = await createProtoChat({
+          machine_slug: selected,
+          customer,
+          title: text,
+        })
+        createdNewSession = true
+        setActiveChat(session)
+        setChatMessages([])
+        setChatSessions((prev) => [session!, ...prev.filter((s) => s.id !== session!.id)])
+      }
+      const r = await sendProtoChatMessage(session.id, {
+        text,
         deep,
       })
-      setResponse(r)
+      setActiveChat(r.session)
+      setChatMessages((prev) => [
+        ...(createdNewSession ? [] : prev),
+        r.user_message,
+        r.assistant_message,
+      ])
+      setSelectedAssistantId(r.assistant_message.id)
+      setChatSessions((prev) => [r.session, ...prev.filter((s) => s.id !== r.session.id)])
+      setQuery('')
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function openChat(session: ProtoChatSession) {
+    setActiveChat(session)
+    setMode('ask')
+    setLoading(true)
+    setSectionDetail(null)
+    setActiveCite(null)
+    try {
+      const detail = await getProtoChat(session.id)
+      setActiveChat(detail.session)
+      setChatMessages(detail.messages)
+      const latestAssistant = [...detail.messages]
+        .reverse()
+        .find((m) => m.role === 'assistant')
+      setSelectedAssistantId(latestAssistant?.id ?? null)
     } catch (e) {
       console.error(e)
     } finally {
@@ -174,7 +254,12 @@ export function ProtoPage() {
           askedQuery={askedQuery}
           onAsk={() => runQuery()}
           loading={loading}
-          response={response}
+          sessions={chatSessions}
+          activeChat={activeChat}
+          messages={chatMessages}
+          selectedAssistantId={selectedAssistantId}
+          setSelectedAssistantId={setSelectedAssistantId}
+          onOpenChat={openChat}
           deep={deep}
           setDeep={setDeep}
           activeCite={activeCite}
@@ -553,7 +638,12 @@ function AskView({
   askedQuery,
   onAsk,
   loading,
-  response,
+  sessions,
+  activeChat,
+  messages,
+  selectedAssistantId,
+  setSelectedAssistantId,
+  onOpenChat,
   deep,
   setDeep,
   activeCite,
@@ -570,7 +660,12 @@ function AskView({
   askedQuery: string
   onAsk: () => void
   loading: boolean
-  response: ProtoAnswerResponse | null
+  sessions: ProtoChatSession[]
+  activeChat: ProtoChatSession | null
+  messages: ProtoChatMessage[]
+  selectedAssistantId: string | null
+  setSelectedAssistantId: (id: string | null) => void
+  onOpenChat: (session: ProtoChatSession) => void
   deep: boolean
   setDeep: (b: boolean) => void
   activeCite: number | null
@@ -582,76 +677,150 @@ function AskView({
   scope: string
   onBack: () => void
 }) {
+  const selectedAssistant =
+    messages.find((m) => m.id === selectedAssistantId && m.role === 'assistant') ||
+    [...messages].reverse().find((m) => m.role === 'assistant') ||
+    null
+  const selectedAssistantIndex = selectedAssistant
+    ? messages.findIndex((m) => m.id === selectedAssistant.id)
+    : -1
+  const selectedQuery =
+    selectedAssistantIndex > 0
+      ? [...messages.slice(0, selectedAssistantIndex)]
+          .reverse()
+          .find((m) => m.role === 'user')?.text || askedQuery
+      : askedQuery
+
   return (
     <>
       <a className="proto2-nav-back" onClick={onBack}>
         ← Zurück
       </a>
-
-      <div className="proto2-ask-bar">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !loading && onAsk()}
-          placeholder="Frage…"
-        />
-        <label className="deep">
-          <input
-            type="checkbox"
-            checked={deep}
-            onChange={(e) => setDeep(e.target.checked)}
-          />
-          Deep mode
-        </label>
-        <button onClick={onAsk} disabled={loading || !query.trim()}>
-          {loading ? 'Denke nach…' : 'Fragen'}
-        </button>
-      </div>
       <div className="proto2-ask-meta">Bereich: <strong>{scope}</strong></div>
 
-      {loading && (
-        <div className="proto2-loading-block">Verarbeite Frage „{askedQuery}"…</div>
-      )}
-
-      {response && (
-        <div className="proto-answer-block">
-          <div
-            className="proto-answer"
-            dangerouslySetInnerHTML={{ __html: formatAnswer(response.answer) }}
-          />
-          {response.model && (
-            <div className="proto-model-label">model: {response.model}</div>
+      <div className="proto-chat-shell">
+        <aside className="proto-chat-history">
+          <div className="proto-chat-history-title">Chats</div>
+          {sessions.length === 0 && (
+            <div className="proto-chat-empty">Noch keine gespeicherten Chats</div>
           )}
+          {sessions.map((session) => (
+            <button
+              key={session.id}
+              type="button"
+              className={activeChat?.id === session.id ? 'active' : ''}
+              onClick={() => onOpenChat(session)}
+            >
+              <span className="title">{session.title || 'Neue Unterhaltung'}</span>
+              <span className="meta">
+                {session.message_count ?? 0} Nachrichten · {formatDateShort(session.last_message_at || session.updated_at)}
+              </span>
+            </button>
+          ))}
+        </aside>
 
-          <div className="proto-citations">
-            {response.citations.map((c) => (
-              <button
-                key={c.idx}
-                className={`proto-cite ${activeCite === c.idx ? 'active' : ''}`}
-                onClick={() => {
-                  if (c.kind === 'page' && c.section_id) {
-                    showSection(c.section_id, c.idx)
-                  } else {
-                    setActiveCite(c.idx)
-                    setSectionDetail(null)
-                  }
-                }}
-                title={`${c.machine} / ${c.doc}`}
-              >
-                [{c.idx}] {c.kind === 'page' ? `p.${c.page}` : c.name || c.doc}
-              </button>
+        <div className="proto-chat-main">
+          <div className="proto-chat-thread">
+            {messages.length === 0 && !loading && (
+              <div className="proto-chat-start">
+                Starte eine Unterhaltung zu diesem Bereich. Folgefragen bleiben im Kontext und werden gespeichert.
+              </div>
+            )}
+            {messages.map((msg) => (
+              <div key={msg.id} className={`proto-chat-message ${msg.role}`}>
+                <div className="proto-chat-message-meta">
+                  <span>{msg.role === 'user' ? msg.username || 'User' : 'Assistant'}</span>
+                  <span>{formatDateShort(msg.created_at)}</span>
+                </div>
+                {msg.role === 'assistant' ? (
+                  <>
+                    <div
+                      className="proto-answer"
+                      dangerouslySetInnerHTML={{ __html: formatAnswer(msg.text) }}
+                    />
+                    {msg.model && (
+                      <div className="proto-model-label">model: {msg.model}</div>
+                    )}
+                    {(msg.citations?.length ?? 0) > 0 && (
+                      <div className="proto-citations">
+                        {msg.citations!.map((c) => (
+                          <button
+                            key={`${msg.id}-${c.idx}`}
+                            className={`proto-cite ${selectedAssistant?.id === msg.id && activeCite === c.idx ? 'active' : ''}`}
+                            onClick={() => {
+                              setSelectedAssistantId(msg.id)
+                              if (c.kind === 'page' && c.section_id) {
+                                showSection(c.section_id, c.idx)
+                              } else {
+                                setActiveCite(c.idx)
+                                setSectionDetail(null)
+                              }
+                            }}
+                            title={`${c.machine} / ${c.doc}`}
+                          >
+                            [{c.idx}] {c.kind === 'page' ? `p.${c.page}` : c.name || c.doc}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="proto-chat-user-text">{msg.text}</div>
+                )}
+              </div>
             ))}
+            {loading && (
+              <div className="proto-chat-message assistant pending">
+                <div className="proto-chat-message-meta">
+                  <span>Assistant</span>
+                  <span>arbeitet</span>
+                </div>
+                <div>Verarbeite „{askedQuery}"…</div>
+              </div>
+            )}
           </div>
 
+          <div className="proto-chat-composer">
+            <textarea
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !loading && query.trim()) {
+                  e.preventDefault()
+                  onAsk()
+                }
+              }}
+              placeholder="Nachricht schreiben…"
+              rows={2}
+            />
+            <label className="deep">
+              <input
+                type="checkbox"
+                checked={deep}
+                onChange={(e) => setDeep(e.target.checked)}
+              />
+              Deep mode
+            </label>
+            <button onClick={onAsk} disabled={loading || !query.trim()}>
+              {loading ? 'Denke nach…' : 'Senden'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {selectedAssistant && (selectedAssistant.hits?.length ?? 0) > 0 && (
+        <div className="proto-answer-block proto-chat-evidence">
+          <div className="proto-chat-evidence-title">Quellen zur ausgewählten Antwort</div>
           <div className="proto-hits">
-            {response.hits.map((h, i) => (
+            {selectedAssistant.hits!.map((h, i) => (
               <HitCard
-                key={`${h.label}-${h.id}`}
+                key={`${selectedAssistant.id}-${h.label}-${h.id}`}
                 hit={h}
                 idx={i + 1}
                 active={activeCite === i + 1}
-                query={askedQuery}
+                query={selectedQuery}
                 onClick={() => {
+                  setSelectedAssistantId(selectedAssistant.id)
                   if (h.label === 'ManualSection') {
                     showSection(h.id, i + 1)
                   } else {
@@ -857,6 +1026,18 @@ function buildSuggestions(m: CustomerOverview['machines'][number]): string[] {
     if ((m.txts ?? 0) > 0) merged.push('Welche Konfigurationen sind hinterlegt?')
   }
   return merged
+}
+
+function formatDateShort(value: string | null | undefined): string {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('de-CH', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function firstNonEmpty(s: string): string {

@@ -121,5 +121,8 @@ else:
 " || true
 fi
 
+echo "[entrypoint] applying Proto schema + indexes..."
+python -c "from proto.schema import apply_indexes; apply_indexes()" || true
+
 echo "[entrypoint] starting uvicorn"
 exec python -m uvicorn proto_server:app --host 0.0.0.0 --port 8000

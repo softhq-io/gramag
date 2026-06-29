@@ -49,6 +49,50 @@ export interface ProtoAnswerResponse {
   citations: ProtoCitation[]
   hits: ProtoHit[]
   model?: string
+  chat_session_id?: string
+  assistant_message_id?: string
+  memory_count?: number
+}
+
+export interface ProtoChatSession {
+  id: string
+  machine_slug?: string | null
+  customer?: string | null
+  title: string
+  created_at: string
+  updated_at: string
+  created_by: string
+  message_count?: number
+  last_message_at?: string | null
+}
+
+export interface ProtoChatMessage {
+  id: string
+  session_id: string
+  role: 'user' | 'assistant'
+  text: string
+  created_at: string
+  username?: string | null
+  user_role?: string | null
+  model?: string | null
+  citations?: ProtoCitation[]
+  hits?: ProtoHit[]
+}
+
+export interface ProtoChatDetail {
+  session: ProtoChatSession
+  messages: ProtoChatMessage[]
+}
+
+export interface ProtoChatMessageResponse {
+  session: ProtoChatSession
+  user_message: ProtoChatMessage
+  assistant_message: ProtoChatMessage
+  answer: string
+  citations: ProtoCitation[]
+  hits: ProtoHit[]
+  model?: string
+  memory_count?: number
 }
 
 export function listProtoMachines(): Promise<ProtoMachine[]> {
@@ -82,6 +126,35 @@ export function askProto(body: {
   deep?: boolean
 }): Promise<ProtoAnswerResponse> {
   return post('/proto/ask', body)
+}
+
+export function createProtoChat(body: {
+  machine_slug?: string | null
+  customer?: string | null
+  title?: string | null
+}): Promise<ProtoChatSession> {
+  return post('/proto/chats', body)
+}
+
+export function listProtoChats(params: {
+  machine_slug?: string | null
+  customer?: string | null
+} = {}): Promise<ProtoChatSession[]> {
+  const qs = new URLSearchParams()
+  if (params.machine_slug) qs.set('machine_slug', params.machine_slug)
+  if (params.customer) qs.set('customer', params.customer)
+  return get(`/proto/chats${qs.toString() ? `?${qs.toString()}` : ''}`)
+}
+
+export function getProtoChat(id: string): Promise<ProtoChatDetail> {
+  return get(`/proto/chats/${id}`)
+}
+
+export function sendProtoChatMessage(
+  id: string,
+  body: { text: string; top_k?: number; deep?: boolean },
+): Promise<ProtoChatMessageResponse> {
+  return post(`/proto/chats/${id}/messages`, body)
 }
 
 export function getProtoSection(id: string) {

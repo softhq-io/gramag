@@ -4,12 +4,21 @@ import html
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
+from auth import get_current_user
 from proto import resolve_cache, resolve_source
-from proto.answer import answer as generate_answer
+from proto.answer import chat_answer as generate_chat_answer
+from proto.chat_store import (
+    append_message,
+    create_session,
+    get_session,
+    list_messages,
+    list_sessions,
+    retrieve_memory,
+)
 from proto.retriever import get_section, list_machines
 
 router = APIRouter(prefix="/api/proto", tags=["proto"])
@@ -23,15 +32,134 @@ class ProtoQuery(BaseModel):
     deep: bool = False
 
 
+class ProtoChatCreate(BaseModel):
+    machine_slug: str | None = None
+    customer: str | None = None
+    title: str | None = None
+
+
+class ProtoChatMessageRequest(BaseModel):
+    text: str
+    top_k: int = 6
+    deep: bool = False
+
+
 @router.post("/ask")
 def ask(q: ProtoQuery):
-    return generate_answer(
+    user = {"username": "compat", "role": "viewer"}
+    session = create_session(
+        machine_slug=q.machine_slug,
+        customer=q.customer,
+        title=q.query,
+        user=user,
+    )
+    append_message(session_id=session["id"], role="user", text=q.query, user=user)
+    messages = list_messages(session["id"])
+    memories = retrieve_memory(query=q.query, session=session)
+    result = generate_chat_answer(
         q.query,
+        transcript=messages,
+        memories=memories,
         machine_slug=q.machine_slug,
         customer=q.customer,
         top_k=q.top_k,
         deep=q.deep,
     )
+    assistant_message = append_message(
+        session_id=session["id"],
+        role="assistant",
+        text=result["answer"],
+        user={"username": "assistant", "role": "assistant"},
+        model=result.get("model"),
+        citations=result.get("citations"),
+        hits=result.get("hits"),
+    )
+    return {
+        **result,
+        "chat_session_id": session["id"],
+        "assistant_message_id": assistant_message["id"],
+    }
+
+
+@router.post("/chats")
+def create_chat(req: ProtoChatCreate, current_user: dict = Depends(get_current_user)):
+    session = create_session(
+        machine_slug=req.machine_slug,
+        customer=req.customer,
+        title=req.title,
+        user=current_user,
+    )
+    return session
+
+
+@router.get("/chats")
+def chats(
+    machine_slug: str | None = None,
+    customer: str | None = None,
+    current_user: dict = Depends(get_current_user),
+):
+    _ = current_user
+    return list_sessions(machine_slug=machine_slug, customer=customer)
+
+
+@router.get("/chats/{chat_id}")
+def chat(chat_id: str, current_user: dict = Depends(get_current_user)):
+    _ = current_user
+    session = get_session(chat_id)
+    if not session:
+        raise HTTPException(404, "Chat not found")
+    return {"session": session, "messages": list_messages(chat_id)}
+
+
+@router.post("/chats/{chat_id}/messages")
+def chat_message(
+    chat_id: str,
+    req: ProtoChatMessageRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    session = get_session(chat_id)
+    if not session:
+        raise HTTPException(404, "Chat not found")
+    text = req.text.strip()
+    if not text:
+        raise HTTPException(400, "Message text is required")
+
+    user_message = append_message(
+        session_id=chat_id,
+        role="user",
+        text=text,
+        user=current_user,
+    )
+    transcript = list_messages(chat_id)
+    memories = retrieve_memory(query=text, session=session)
+    result = generate_chat_answer(
+        text,
+        transcript=transcript,
+        memories=memories,
+        machine_slug=session.get("machine_slug"),
+        customer=session.get("customer"),
+        top_k=req.top_k,
+        deep=req.deep,
+    )
+    assistant_message = append_message(
+        session_id=chat_id,
+        role="assistant",
+        text=result["answer"],
+        user={"username": "assistant", "role": "assistant"},
+        model=result.get("model"),
+        citations=result.get("citations"),
+        hits=result.get("hits"),
+    )
+    return {
+        "session": get_session(chat_id),
+        "user_message": user_message,
+        "assistant_message": assistant_message,
+        "answer": result["answer"],
+        "citations": result.get("citations", []),
+        "hits": result.get("hits", []),
+        "model": result.get("model"),
+        "memory_count": result.get("memory_count", 0),
+    }
 
 
 @router.get("/machines")

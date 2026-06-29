@@ -42,6 +42,15 @@ def apply_indexes():
         ("ConfigFile", "name"),
         ("ImageAsset", "id"),
         ("ImageAsset", "category"),
+        ("ProtoChatSession", "id"),
+        ("ProtoChatSession", "machine_slug"),
+        ("ProtoChatSession", "customer"),
+        ("ProtoChatSession", "updated_at"),
+        ("ProtoChatSession", "created_by"),
+        ("ProtoChatMessage", "id"),
+        ("ProtoChatMessage", "session_id"),
+        ("ProtoChatMessage", "created_at"),
+        ("ProtoChatMessage", "username"),
     ]
     for label, prop in range_indexes:
         _safe(
@@ -57,6 +66,7 @@ def apply_indexes():
         ("ManualSection", ["text", "vision_desc", "merged"]),
         ("ConfigFile", ["content", "summary"]),
         ("ImageAsset", ["caption", "ocr_text"]),
+        ("ProtoChatMessage", ["text"]),
     ]
     for label, props in fulltext:
         props_str = ", ".join(f"'{p}'" for p in props)
@@ -66,7 +76,7 @@ def apply_indexes():
         )
 
     print("\nVector indexes...")
-    for label in ("ManualSection", "ConfigFile", "ImageAsset"):
+    for label in ("ManualSection", "ConfigFile", "ImageAsset", "ProtoChatMessage"):
         _safe(
             f"CREATE VECTOR INDEX FOR (n:{label}) ON (n.embedding) "
             f"OPTIONS {{dimension: {EMBED_DIMENSIONS}, similarityFunction: 'cosine'}}",
