@@ -2400,6 +2400,18 @@ body {
 .proto2-machine-hero .qa-item { padding: 9px 12px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 6px; cursor: pointer; font-size: 12px; line-height: 1.4; }
 .proto2-machine-hero .qa-item:hover { background: #2d343d; }
 
+.proto2-machine-chats { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+.proto2-machine-chats-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.proto2-machine-chats-head .label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
+.proto2-machine-chats-head h3 { font-size: 14px; font-weight: 600; }
+.proto2-machine-chats-head > span { font-size: 12px; color: var(--text-secondary); font-family: 'SF Mono', monospace; }
+.proto2-machine-chats .empty { color: var(--text-secondary); font-size: 12px; padding: 4px 0; }
+.proto2-machine-chats .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.proto2-machine-chats button { text-align: left; background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-primary); border-radius: 8px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.proto2-machine-chats button:hover { border-color: var(--accent-blue); background: #121b29; }
+.proto2-machine-chats .title { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proto2-machine-chats .meta { font-size: 10px; color: var(--text-secondary); }
+
 .proto2-nav-back { color: var(--accent-blue); font-size: 12px; cursor: pointer; margin-bottom: 12px; display: inline-block; }
 .proto2-nav-back:hover { text-decoration: underline; }
 

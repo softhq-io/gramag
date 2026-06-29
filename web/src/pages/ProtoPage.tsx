@@ -81,17 +81,8 @@ export function ProtoPage() {
     setSelectedAssistantId(null)
     setSectionDetail(null)
     listProtoChats({ machine_slug: slug })
-      .then(async (sessions) => {
+      .then((sessions) => {
         setChatSessions(sessions)
-        const latest = sessions[0]
-        if (!latest) return
-        const detail = await getProtoChat(latest.id)
-        setActiveChat(detail.session)
-        setChatMessages(detail.messages)
-        const latestAssistant = [...detail.messages]
-          .reverse()
-          .find((m) => m.role === 'assistant')
-        setSelectedAssistantId(latestAssistant?.id ?? null)
       })
       .catch(console.error)
   }
@@ -109,6 +100,7 @@ export function ProtoPage() {
   async function runQuery(q?: string) {
     const text = (q ?? query).trim()
     if (!text) return
+    const startingMode = mode
     setQuery(text)
     setAskedQuery(text)
     setLoading(true)
@@ -121,7 +113,9 @@ export function ProtoPage() {
         : kunde === 'Alle' ? null : kunde
       let session = activeChat
       let createdNewSession = false
+      const forceNewSession = startingMode !== 'ask'
       if (
+        forceNewSession ||
         !session ||
         (session.machine_slug ?? null) !== selected ||
         (session.customer ?? null) !== customer
@@ -243,6 +237,8 @@ export function ProtoPage() {
           deep={deep}
           setDeep={setDeep}
           loading={loading}
+          sessions={chatSessions}
+          onOpenChat={openChat}
           onBack={backToSite}
         />
       )}
@@ -561,6 +557,8 @@ function MachineLanding({
   deep,
   setDeep,
   loading,
+  sessions,
+  onOpenChat,
   onBack,
 }: {
   machine: CustomerOverview['machines'][number]
@@ -571,6 +569,8 @@ function MachineLanding({
   deep: boolean
   setDeep: (b: boolean) => void
   loading: boolean
+  sessions: ProtoChatSession[]
+  onOpenChat: (session: ProtoChatSession) => void
   onBack: () => void
 }) {
   const suggestions = buildSuggestions(machine)
@@ -606,6 +606,34 @@ function MachineLanding({
           ))}
         </div>
       </div>
+
+      <section className="proto2-machine-chats">
+        <div className="proto2-machine-chats-head">
+          <div>
+            <div className="label">Gespeicherte Chats</div>
+            <h3>Vergangene Unterhaltungen</h3>
+          </div>
+          <span>{sessions.length}</span>
+        </div>
+        {sessions.length === 0 ? (
+          <div className="empty">Noch keine Chats zu dieser Maschine.</div>
+        ) : (
+          <div className="items">
+            {sessions.map((session) => (
+              <button
+                key={session.id}
+                type="button"
+                onClick={() => onOpenChat(session)}
+              >
+                <span className="title">{session.title || 'Neue Unterhaltung'}</span>
+                <span className="meta">
+                  {session.message_count ?? 0} Nachrichten · {formatDateShort(session.last_message_at || session.updated_at)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="proto2-ask-bar">
         <input
