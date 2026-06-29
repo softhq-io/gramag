@@ -2276,7 +2276,7 @@ body {
 .proto-model-label { margin-top: 12px; font-size: 11px; color: var(--text-secondary); font-family: monospace; }
 
 .proto-citations { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0; }
-.proto-cite { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.proto-cite { background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; max-width: 100%; overflow-wrap: anywhere; }
 .proto-cite.active { background: var(--accent-purple); color: #fff; border-color: var(--accent-purple); }
 
 .proto-hits { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-top: 12px; }
@@ -2318,12 +2318,12 @@ body {
 .proto-hit-badge.b-manualsection { background: #1a4a2b; color: #7ee787; }
 .proto-hit-badge.b-configfile { background: #3a2a5a; color: #d2a8ff; }
 .proto-hit-badge.b-imageasset { background: #2a3a5a; color: #79c0ff; }
-.proto-hit-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.proto-hit-headline { margin-top: 10px; font-size: 12px; color: var(--text-primary); font-weight: 600; line-height: 1.4; }
+.proto-hit-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+.proto-hit-headline { margin-top: 10px; font-size: 12px; color: var(--text-primary); font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; word-break: break-word; }
 .proto-hit-snippet mark { background: #ffd33d40; color: var(--text-primary); padding: 0 2px; border-radius: 2px; }
 .proto-hit .proto-hit-score { font-size: 10px; color: var(--text-secondary); font-family: 'SF Mono', monospace; margin-top: 0; }
 
-.proto-hit-doc-link { color: var(--accent-blue); cursor: pointer; text-decoration: none; }
+.proto-hit-doc-link { color: var(--accent-blue); cursor: pointer; text-decoration: none; overflow-wrap: anywhere; word-break: break-word; }
 .proto-hit-doc-link:hover { text-decoration: underline; color: var(--accent-purple); }
 
 /* ── Proto v2 (customer fleet view) ────────────────────────── */
@@ -2444,6 +2444,15 @@ body {
 .proto-chat-evidence { margin-top: 14px; }
 .proto-chat-evidence-title { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
 
+.proto-thinking-dots { display: inline-flex; width: 18px; margin-left: 1px; justify-content: flex-start; }
+.proto-thinking-dots span { opacity: 0.25; animation: proto-dot-pulse 1.05s infinite; }
+.proto-thinking-dots span:nth-child(2) { animation-delay: 0.18s; }
+.proto-thinking-dots span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes proto-dot-pulse {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  45% { opacity: 1; transform: translateY(-1px); }
+}
+
 @media (max-width: 880px) {
   .proto2-section-row { align-items: stretch; }
   .proto2-filters { width: 100%; align-items: stretch; }
@@ -2460,6 +2469,8 @@ body {
 /* Thumbnail hover zoom — preview when hovering on hit card thumbnail */
 .proto-hit-thumb { transition: transform 0.18s ease, box-shadow 0.18s ease; position: relative; z-index: 1; }
 .proto-hit-thumb:hover { transform: scale(4); transform-origin: left top; z-index: 100; box-shadow: 0 12px 40px rgba(0,0,0,0.8); }
+.proto-hit-thumb-fallback { display: flex; align-items: center; justify-content: center; background: var(--bg-tertiary); color: var(--text-secondary); font-size: 10px; text-align: center; padding: 6px; cursor: default; }
+.proto-hit-thumb-fallback:hover { transform: none; box-shadow: none; }
 .proto-hit { overflow: visible; }
 
 /* Section detail: single big image centered, no side text */

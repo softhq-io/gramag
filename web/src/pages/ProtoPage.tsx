@@ -101,7 +101,7 @@ export function ProtoPage() {
     const text = (q ?? query).trim()
     if (!text) return
     const startingMode = mode
-    setQuery(text)
+    setQuery('')
     setAskedQuery(text)
     setLoading(true)
     setSectionDetail(null)
@@ -353,7 +353,7 @@ function SiteOverview({
           Deep mode
         </label>
         <button onClick={onAsk} disabled={loading || !query.trim()}>
-          {loading ? 'Denke nach…' : 'Fragen'}
+          {loading ? <span>Denke nach<ThinkingDots /></span> : 'Fragen'}
         </button>
       </div>
       <div className="proto2-ask-meta">
@@ -651,7 +651,7 @@ function MachineLanding({
           Deep mode
         </label>
         <button onClick={onAsk} disabled={loading || !query.trim()}>
-          {loading ? 'Denke nach…' : 'Fragen'}
+          {loading ? <span>Denke nach<ThinkingDots /></span> : 'Fragen'}
         </button>
       </div>
     </>
@@ -803,7 +803,9 @@ function AskView({
                   <span>Assistant</span>
                   <span>arbeitet</span>
                 </div>
-                <div>Verarbeite „{askedQuery}"…</div>
+                <div>
+                  Verarbeite „{askedQuery}"<ThinkingDots />
+                </div>
               </div>
             )}
           </div>
@@ -830,7 +832,7 @@ function AskView({
               Deep mode
             </label>
             <button onClick={onAsk} disabled={loading || !query.trim()}>
-              {loading ? 'Denke nach…' : 'Senden'}
+              {loading ? <span>Denke nach<ThinkingDots /></span> : 'Senden'}
             </button>
           </div>
         </div>
@@ -941,9 +943,7 @@ function HitCard({
       onClick={onClick}
     >
       <div className="proto-hit-top">
-        {thumbUrl && (
-          <img src={thumbUrl} alt="" className="proto-hit-thumb" loading="lazy" />
-        )}
+        <SourceThumbnail src={thumbUrl} />
         <div className="proto-hit-meta">
           <div className="proto-hit-badge-row">
             <span className={`proto-hit-badge b-${label.toLowerCase()}`}>
@@ -973,6 +973,36 @@ function HitCard({
         />
       )}
     </div>
+  )
+}
+
+function SourceThumbnail({ src }: { src: string | null }) {
+  const [failed, setFailed] = useState(false)
+  if (!src || failed) {
+    return (
+      <div className="proto-hit-thumb proto-hit-thumb-fallback" aria-hidden="true">
+        <span>Kein Bild</span>
+      </div>
+    )
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      className="proto-hit-thumb"
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  )
+}
+
+function ThinkingDots() {
+  return (
+    <span className="proto-thinking-dots" aria-hidden="true">
+      <span>.</span>
+      <span>.</span>
+      <span>.</span>
+    </span>
   )
 }
 
