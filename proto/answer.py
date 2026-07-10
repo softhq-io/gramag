@@ -5,6 +5,7 @@ from pathlib import Path
 from ai_client import image_content, vision_chat, vision_chat_messages
 from config import AZURE_OPENAI_VISION_DEPLOYMENT
 from proto import resolve_cache
+from proto.erp_context import format_erp_context, retrieve_erp_context
 from proto.retriever import retrieve
 
 ANSWER_MODEL = AZURE_OPENAI_VISION_DEPLOYMENT
@@ -34,6 +35,24 @@ If — after reading all the evidence — the specific information is genuinely
 absent, say so; but never fabricate limitations that are not real.
 """
 
+ERP_ANSWER_RULES = """\
+When ERP context is available:
+- Start with the practical conclusion, then give only the most relevant
+  recent service entries, recurring issues, and frequent parts.
+- For grouped ERP records, mention the group identifier once and treat the
+  records as one related machine/line. Do not list every ERP ID or every
+  title unless the user explicitly asks for the raw mapping.
+- Summarize messy service comments before quoting them. Keep raw comments
+  short and only include them when they materially answer the question.
+- Use natural source labels such as "(ERP service history)" or
+  "(ERP part usage)"; do not emit repeated bracket citations like
+  "[CITE: ERP service history]".
+- Do not offer to create/send PDFs, request offers, contact suppliers, open
+  tickets, or perform external actions unless such an action tool is actually
+  available and has been used. You may suggest the user can request/export
+  more detail separately.
+"""
+
 CHAT_SYSTEM_PROMPT = SYSTEM_PROMPT + """
 
 You are answering inside a persistent specialist chat. Use context in this
@@ -41,13 +60,17 @@ priority order:
 1. The current chat transcript, especially the latest user message.
 2. Relevant previous specialist chat memory for the same machine/customer.
 3. Retrieved documentation evidence.
+4. Linked ERP machine context, when available, for service history, parts,
+   customer, and machine identity.
 
 Authenticated specialist chat memory is trusted operational knowledge. If it
 conflicts with documentation evidence, prefer the specialist memory and mention
 the conflict plainly. Do not cite chat memory as a document citation; describe
-it as previous specialist chat memory. Continue citing document evidence with
-the required [CITE: ...] format.
-"""
+it as previous specialist chat memory. ERP context is trusted operational data,
+but it is not document evidence; label it as ERP service history, ERP part
+usage, or ERP machine record. Continue citing document evidence with the
+required [CITE: ...] format.
+""" + "\n" + ERP_ANSWER_RULES
 
 
 def _build_evidence_parts(hits: list[dict], max_images: int = 6) -> tuple[list, list[dict]]:
@@ -95,7 +118,8 @@ def _build_evidence_parts(hits: list[dict], max_images: int = 6) -> tuple[list, 
 def answer(query: str, *, machine_slug: str | None = None, customer: str | None = None,
            top_k: int = 6, deep: bool = False) -> dict:
     hits = retrieve(query, top_k=top_k, machine_slug=machine_slug, customer=customer)
-    if not hits:
+    erp_context = retrieve_erp_context(machine_slug)
+    if not hits and not erp_context:
         return {
             "answer": "Brak wyników w bazie dla tego zapytania.",
             "citations": [], "hits": [],
@@ -104,9 +128,17 @@ def answer(query: str, *, machine_slug: str | None = None, customer: str | None 
     evidence_parts, citations = _build_evidence_parts(hits)
     user_parts = [
         {"type": "text", "text": SYSTEM_PROMPT},
-        {"type": "text", "text": f"\n\nQUESTION: {query}\n\nEVIDENCE:\n"},
+        {"type": "text", "text": f"\n\nQUESTION: {query}\n\nLINKED ERP CONTEXT:\n{format_erp_context(erp_context)}\n\nDOCUMENT EVIDENCE:\n"},
         *evidence_parts,
-        {"type": "text", "text": "\n\nAnswer now, citing sources as [n] inline."},
+        {
+            "type": "text",
+            "text": (
+                "\n\nAnswer now. Cite document evidence as [n] inline. "
+                "When using ERP data, label it as ERP machine record, ERP "
+                "service history, or ERP part usage rather than as a document citation.\n\n"
+                f"{ERP_ANSWER_RULES}"
+            ),
+        },
     ]
 
     model = DEEP_MODEL if deep else ANSWER_MODEL
@@ -119,6 +151,7 @@ def answer(query: str, *, machine_slug: str | None = None, customer: str | None 
             for h in hits
         ],
         "model": model,
+        "erp_context": erp_context,
     }
 
 
@@ -167,14 +200,16 @@ def chat_answer(
 ) -> dict:
     hits = retrieve(query, top_k=top_k, machine_slug=machine_slug, customer=customer)
     evidence_parts, citations = _build_evidence_parts(hits) if hits else ([], [])
+    erp_context = retrieve_erp_context(machine_slug)
 
-    if not hits and not memories:
+    if not hits and not memories and not erp_context:
         return {
             "answer": "Brak wyników w bazie ani w zapisanej historii czatu dla tego zapytania.",
             "citations": [],
             "hits": [],
             "model": DEEP_MODEL if deep else ANSWER_MODEL,
             "memory_count": 0,
+            "erp_context": None,
         }
 
     user_parts = [
@@ -185,6 +220,8 @@ def chat_answer(
                 f"{_format_transcript(transcript)}\n\n"
                 "RELEVANT PREVIOUS SPECIALIST CHAT MEMORY:\n"
                 f"{_format_memory(memories)}\n\n"
+                "LINKED ERP CONTEXT:\n"
+                f"{format_erp_context(erp_context)}\n\n"
                 f"LATEST USER MESSAGE:\n{query}\n\n"
                 "DOCUMENT EVIDENCE:\n"
             ),
@@ -194,8 +231,10 @@ def chat_answer(
             "type": "text",
             "text": (
                 "\n\nAnswer now. Prefer current chat and specialist memory over "
-                "documents when they conflict, but cite document evidence as [n] "
-                "inline when you use it."
+                "documents when they conflict. Cite document evidence as [n] "
+                "inline when you use it. When using ERP data, label it as ERP "
+                "machine record, ERP service history, or ERP part usage.\n\n"
+                f"{ERP_ANSWER_RULES}"
             ),
         },
     ]
@@ -219,4 +258,5 @@ def chat_answer(
         ],
         "model": model,
         "memory_count": len(memories),
+        "erp_context": erp_context,
     }

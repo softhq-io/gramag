@@ -52,6 +52,7 @@ export interface ProtoAnswerResponse {
   chat_session_id?: string
   assistant_message_id?: string
   memory_count?: number
+  erp_context?: unknown
 }
 
 export interface ProtoChatSession {
@@ -93,6 +94,7 @@ export interface ProtoChatMessageResponse {
   hits: ProtoHit[]
   model?: string
   memory_count?: number
+  erp_context?: unknown
 }
 
 export function listProtoMachines(): Promise<ProtoMachine[]> {

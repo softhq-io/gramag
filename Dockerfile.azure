@@ -34,7 +34,7 @@ WORKDIR /app
 COPY proto/ ./proto/
 COPY proto_server.py config.py ai_client.py db.py db_helpers.py embeddings.py refresh_graph_embeddings.py ./
 COPY auth.py auth_router.py seed_users.py ./
-COPY erp_router.py retriever.py schema.py import_new_erp_subset.py seed_erp.py validate_erp_import.py exxas_daily_sync.py sharepoint_proto_sync.py ./
+COPY erp_router.py retriever.py schema.py import_new_erp_subset.py seed_erp.py validate_erp_import.py exxas_daily_sync.py sharepoint_proto_sync.py proto_erp_link.py ./
 COPY mission_router.py mission.py fleet_router.py fleet.py ./
 
 COPY demo_subset_full_history_6.json ./data/demo_subset.json

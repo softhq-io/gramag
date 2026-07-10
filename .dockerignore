@@ -12,6 +12,7 @@ web/dist/
 # Don't bundle data inside the image — goes on Fly volume
 data/
 index/
+seed/
 proto/cache/pages/
 drive-download-*/
 
