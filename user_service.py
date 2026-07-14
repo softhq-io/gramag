@@ -110,12 +110,12 @@ def list_users() -> list[dict]:
                    u.created_at AS created_at, u.updated_at AS updated_at,
                    u.last_login_at AS last_login_at,
                    collect(DISTINCT c.erp_id) AS client_ids
-            ORDER BY toLower(coalesce(u.name, u.email, u.username))
             """
         )
     )
     for row in rows:
         row["client_ids"] = [client_id for client_id in (row.get("client_ids") or []) if client_id]
+    rows.sort(key=lambda row: str(row.get("name") or row.get("email") or "").casefold())
     return rows
 
 

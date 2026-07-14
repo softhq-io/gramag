@@ -95,6 +95,27 @@ class UserLifecycleTests(unittest.TestCase):
                 )
         self.assertEqual(ctx.exception.status_code, 422)
 
+    def test_user_listing_sorts_after_aggregated_query(self):
+        columns = [
+            "id", "email", "name", "role", "active", "must_change_password",
+            "created_at", "updated_at", "last_login_at", "client_ids",
+        ]
+        result = QueryResult(columns, [
+            ["u2", "z@example.com", "Zulu", "user", True, False, None, None, None, [None]],
+            ["u1", "a@example.com", "alpha", "all_clients", True, False, None, None, None, []],
+        ])
+        captured = {}
+
+        def query(cypher, params=None):
+            captured["cypher"] = cypher
+            return result
+
+        with patch.object(user_service.db, "query", side_effect=query):
+            users = user_service.list_users()
+        self.assertEqual([user["id"] for user in users], ["u1", "u2"])
+        self.assertEqual(users[1]["client_ids"], [])
+        self.assertNotIn("ORDER BY", captured["cypher"])
+
     def test_legacy_users_keep_password_hashes_and_receive_all_clients(self):
         legacy_users = QueryResult(
             ["id", "username", "email", "email_normalized", "role", "password_hash"],
