@@ -116,8 +116,12 @@ def _build_evidence_parts(hits: list[dict], max_images: int = 6) -> tuple[list, 
 
 
 def answer(query: str, *, machine_slug: str | None = None, customer: str | None = None,
-           top_k: int = 6, deep: bool = False) -> dict:
-    hits = retrieve(query, top_k=top_k, machine_slug=machine_slug, customer=customer)
+           top_k: int = 6, deep: bool = False, all_clients: bool = False,
+           client_ids: list[str] | None = None) -> dict:
+    hits = retrieve(
+        query, top_k=top_k, machine_slug=machine_slug, customer=customer,
+        all_clients=all_clients, client_ids=client_ids or [],
+    )
     erp_context = retrieve_erp_context(machine_slug)
     if not hits and not erp_context:
         return {
@@ -197,8 +201,13 @@ def chat_answer(
     customer: str | None = None,
     top_k: int = 6,
     deep: bool = False,
+    all_clients: bool = False,
+    client_ids: list[str] | None = None,
 ) -> dict:
-    hits = retrieve(query, top_k=top_k, machine_slug=machine_slug, customer=customer)
+    hits = retrieve(
+        query, top_k=top_k, machine_slug=machine_slug, customer=customer,
+        all_clients=all_clients, client_ids=client_ids or [],
+    )
     evidence_parts, citations = _build_evidence_parts(hits) if hits else ([], [])
     erp_context = retrieve_erp_context(machine_slug)
 

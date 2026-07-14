@@ -25,13 +25,20 @@ def extract_page_refs(query: str) -> list[int]:
     return list(dict.fromkeys(pages))
 
 
-def _vector_search(label: str, query_embedding: list[float], top_k: int,
-                   machine_slug: str | None, customer: str | None) -> list[dict]:
+def _vector_search(
+    label: str,
+    query_embedding: list[float],
+    top_k: int,
+    machine_slug: str | None,
+    customer: str | None,
+    all_clients: bool,
+    client_ids: list[str],
+) -> list[dict]:
     try:
         result = proto_db.query(
             f"""
             CALL db.idx.vector.queryNodes(
-                '{label}', 'embedding', $k, vecf32($emb)
+                '{label}', 'embedding', $candidate_k, vecf32($emb)
             ) YIELD node, score
             OPTIONAL MATCH (m:Machine)-[:HAS_DOCUMENT]->(d:Document)
             WHERE ((node:ManualSection AND d.id = node.document_id)
@@ -40,13 +47,22 @@ def _vector_search(label: str, query_embedding: list[float], top_k: int,
             WITH node, score, m, d
             WHERE ($slug IS NULL OR m.slug = $slug)
               AND ($customer IS NULL OR coalesce(m.customer, '') = $customer)
+              AND ($all_clients OR m.erp_customer_id IN $client_ids)
             RETURN node, score, m.slug AS machine_slug, m.folder AS machine_folder,
                    d.name AS doc_name, d.kind AS doc_kind, d.category AS category,
                    d.id AS document_id
             ORDER BY score DESC
-            LIMIT $k
+            LIMIT $limit
             """,
-            {"emb": query_embedding, "k": top_k, "slug": machine_slug, "customer": customer},
+            {
+                "emb": query_embedding,
+                "candidate_k": max(100, top_k * 25),
+                "limit": top_k,
+                "slug": machine_slug,
+                "customer": customer,
+                "all_clients": all_clients,
+                "client_ids": client_ids,
+            },
         )
     except Exception as e:
         print(f"  vector search error on {label}: {e}")
@@ -84,6 +100,8 @@ def _fetch_pages_direct(
     machine_slug: str | None,
     customer: str | None,
     top_k: int,
+    all_clients: bool,
+    client_ids: list[str],
 ) -> list[dict]:
     """Directly fetch ManualSections matching specific page numbers."""
     result = proto_db.query(
@@ -92,12 +110,14 @@ def _fetch_pages_direct(
         WHERE s.page IN $pages
           AND ($slug IS NULL OR m.slug = $slug)
           AND ($customer IS NULL OR coalesce(m.customer, '') = $customer)
+          AND ($all_clients OR m.erp_customer_id IN $client_ids)
         RETURN s, m.slug AS machine_slug, m.folder AS machine_folder,
                d.name AS doc_name, d.kind AS doc_kind, d.category AS category,
                d.id AS document_id
         LIMIT $k
         """,
-        {"pages": pages, "slug": machine_slug, "customer": customer, "k": top_k},
+        {"pages": pages, "slug": machine_slug, "customer": customer, "k": top_k,
+         "all_clients": all_clients, "client_ids": client_ids},
     )
     out = []
     for row in result.result_set or []:
@@ -143,6 +163,8 @@ def _keyword_boost(
     query: str,
     machine_slug: str | None,
     customer: str | None,
+    all_clients: bool,
+    client_ids: list[str],
     limit: int = 15,
 ) -> list[dict]:
     """Boost sections whose parent Document.name matches query keywords.
@@ -187,6 +209,7 @@ def _keyword_boost(
             MATCH (m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_SECTION]->(s)
             WHERE ($slug IS NULL OR m.slug = $slug)
               AND ($customer IS NULL OR coalesce(m.customer, '') = $customer)
+              AND ($all_clients OR m.erp_customer_id IN $client_ids)
             RETURN s, ft_score,
                    m.slug AS machine_slug, m.folder AS machine_folder,
                    d.name AS doc_name, d.kind AS doc_kind,
@@ -194,7 +217,8 @@ def _keyword_boost(
             ORDER BY ft_score DESC
             LIMIT $k
             """,
-            {"q": ft_query, "slug": machine_slug, "customer": customer, "k": limit},
+            {"q": ft_query, "slug": machine_slug, "customer": customer, "k": limit,
+             "all_clients": all_clients, "client_ids": client_ids},
         )
     except Exception as e:
         print(f"  keyword_boost fulltext error: {e}")
@@ -229,16 +253,22 @@ def _keyword_boost(
 
 def retrieve(query: str, *, top_k: int = 8, machine_slug: str | None = None,
              customer: str | None = None,
+             all_clients: bool = False,
+             client_ids: list[str] | None = None,
              include: tuple[str, ...] = ("ManualSection", "ConfigFile", "ImageAsset"),
              quotas: dict[str, float] | None = None) -> list[dict]:
     quotas = quotas or DEFAULT_QUOTAS
+    client_ids = client_ids or []
     merged: list[dict] = []
 
     # Direct page routing — "strona 13" / "page 13" / "Seite 13"
     page_refs = extract_page_refs(query)
     direct_ids: set[str] = set()
     if page_refs:
-        direct = _fetch_pages_direct(page_refs, machine_slug, customer, top_k=len(page_refs) * 8)
+        direct = _fetch_pages_direct(
+            page_refs, machine_slug, customer, top_k=len(page_refs) * 8,
+            all_clients=all_clients, client_ids=client_ids,
+        )
         for d in direct:
             direct_ids.add(d["id"])
         merged.extend(direct)
@@ -250,13 +280,17 @@ def retrieve(query: str, *, top_k: int = 8, machine_slug: str | None = None,
     query_emb = generate_query_embedding(query)
 
     # Keyword boost via fulltext on Document names
-    kw_hits = _keyword_boost(query, machine_slug, customer, limit=max(6, top_k))
+    kw_hits = _keyword_boost(
+        query, machine_slug, customer, all_clients, client_ids, limit=max(6, top_k)
+    )
     kw_ids = {h["id"] for h in kw_hits}
 
     # Per-label fetch with quotas. Over-fetch then trim to quota.
     by_label: dict[str, list[dict]] = {}
     for label in include:
-        items = _vector_search(label, query_emb, top_k * 3, machine_slug, customer)
+        items = _vector_search(
+            label, query_emb, top_k * 3, machine_slug, customer, all_clients, client_ids
+        )
         # For ManualSection, merge kw hits; keep best score per id
         if label == "ManualSection":
             best: dict[str, dict] = {}
@@ -300,10 +334,11 @@ def retrieve(query: str, *, top_k: int = 8, machine_slug: str | None = None,
     return (direct_hits + other_hits)[:top_k]
 
 
-def list_machines() -> list[dict]:
+def list_machines(*, all_clients: bool = False, client_ids: list[str] | None = None) -> list[dict]:
     result = proto_db.query(
         """
         MATCH (m:Machine)
+        WHERE $all_clients OR m.erp_customer_id IN $client_ids
         OPTIONAL MATCH (m)-[:HAS_DOCUMENT]->(d:Document)
         WITH m, count(DISTINCT d) AS docs,
              sum(CASE WHEN d.kind = 'pdf' THEN 1 ELSE 0 END) AS pdfs,
@@ -317,7 +352,8 @@ def list_machines() -> list[dict]:
                coalesce(c.name, m.customer) AS customer,
                docs, pdfs, imgs, txts, sections
         ORDER BY customer, folder
-        """
+        """,
+        {"all_clients": all_clients, "client_ids": client_ids or []},
     )
     return result_to_dicts(result)
 

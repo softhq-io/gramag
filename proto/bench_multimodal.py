@@ -154,7 +154,7 @@ def main():
     for i, case in enumerate(QUERIES, start=1):
         print(f"\n[{i}/{len(QUERIES)}] {case['id']} — {case['q'][:70]}...")
         t0 = time.time()
-        hits = retrieve(case["q"], top_k=6, machine_slug=case["scope"])
+        hits = retrieve(case["q"], top_k=6, machine_slug=case["scope"], all_clients=True)
         print(f"  retrieved {len(hits)} hits in {time.time()-t0:.1f}s")
 
         # A. Text-only

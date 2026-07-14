@@ -46,22 +46,6 @@ export interface ServiceJob {
   parts: { nummer: string; titel: string }[]
 }
 
-export interface SimilarCase {
-  job_erp_id: string
-  job_title: string
-  job_date: string
-  job_nummer: string
-  job_description: string
-  machine_title: string
-  machine_erp_id: string
-  customer: string
-  machine_type: string
-  parts_used: { nummer: string; titel: string }[]
-  comments: Comment[]
-  symptom_match?: boolean
-  llm_summary?: string
-}
-
 export interface PartEntry {
   nummer: string
   titel: string
@@ -96,7 +80,6 @@ export interface Briefing {
   symptom: string
   summary: string
   history: ServiceJob[]
-  similar_cases: SimilarCase[]
   parts_kit: PartsKit
   manuals: ManualRef[]
   reasoning_path: ReasoningStep[]
@@ -164,12 +147,6 @@ export function getServiceHistory(erpId: string, limit = 20) {
 
 export function getPartsKit(erpId: string) {
   return get<PartsKit>(`/mission/machine/${encodeURIComponent(erpId)}/parts-kit`)
-}
-
-export function getSimilarCases(erpId: string, symptom = '', limit = 8) {
-  return get<SimilarCase[]>(
-    `/mission/machine/${encodeURIComponent(erpId)}/similar-cases?symptom=${encodeURIComponent(symptom)}&limit=${limit}`
-  )
 }
 
 export function getPartDetail(nummer: string) {

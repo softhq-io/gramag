@@ -175,6 +175,5 @@ export function getProtoSection(id: string) {
 }
 
 export function protoPageImageUrl(sectionId: string): string {
-  const token = localStorage.getItem('access_token')
-  return `/api/proto/page-image/${sectionId}${token ? `?t=${token.slice(0, 8)}` : ''}`
+  return `/api/proto/page-image/${sectionId}`
 }

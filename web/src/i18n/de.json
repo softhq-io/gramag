@@ -8,9 +8,15 @@
     "login": "Anmelden",
     "logging_in": "Anmelden...",
     "logout": "Abmelden",
-    "username": "Benutzername",
+    "username": "E-Mail",
+    "email": "E-Mail",
     "password": "Passwort",
-    "loginError": "Ungültige Anmeldedaten"
+    "loginError": "Ungültige Anmeldedaten",
+    "changePasswordRequired": "Bitte wählen Sie ein neues Passwort, bevor Sie fortfahren.",
+    "newPassword": "Neues Passwort (mindestens 12 Zeichen)",
+    "confirmPassword": "Neues Passwort bestätigen",
+    "passwordMismatch": "Die Passwörter stimmen nicht überein",
+    "setPassword": "Passwort festlegen"
   },
   "search": {
     "placeholder": "Maschine suchen...",

@@ -8,6 +8,8 @@ import { MissionBriefingPage } from './pages/MissionBriefingPage'
 import { FleetDashboardPage } from './pages/FleetDashboardPage'
 import { PartDetailPage } from './pages/PartDetailPage'
 import { ProtoPage } from './pages/ProtoPage'
+import { UsersAdminPage } from './pages/UsersAdminPage'
+import { SuperadminRoute } from './auth/SuperadminRoute'
 import './i18n'
 
 const PROTO_ONLY = (import.meta.env.VITE_PROTO_ONLY as string) === '1'
@@ -30,6 +32,7 @@ function App() {
               </>
             )}
             <Route path="/proto" element={<ProtoPage />} />
+            <Route path="/admin/users" element={<SuperadminRoute><UsersAdminPage /></SuperadminRoute>} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -1,7 +1,7 @@
 """Gramag Knowledge Assistant — FastAPI Server (v2 with Knowledge Graph)"""
 import numpy as np
 import pickle, os, json
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +10,8 @@ from ai_client import chat
 from config import INDEX_DIR, PDF_DIR
 from embeddings import generate_query_embedding
 from auth_router import router as auth_router
+from admin_router import router as admin_router
+from auth import get_current_user
 from mission_router import router as mission_router
 from fleet_router import router as fleet_router
 from proto.router import router as proto_router
@@ -18,12 +20,15 @@ app = FastAPI(title="Gramag Knowledge Assistant")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(mission_router)
 app.include_router(fleet_router)
 app.include_router(proto_router)
 
-# Serve PDFs for citation links
-app.mount("/api/pdfs", StaticFiles(directory=PDF_DIR), name="pdfs")
+def require_global_user(user: dict = Depends(get_current_user)) -> dict:
+    if not user.get("all_clients"):
+        raise HTTPException(status_code=403, detail="This legacy endpoint requires all-client access")
+    return user
 
 # Build filename -> relative path map for PDF links
 _pdf_path_map: dict[str, str] = {}
@@ -70,7 +75,7 @@ class Question(BaseModel):
 # ── V1 endpoints (kept as-is) ────────────────────────────────────────
 
 @app.post("/api/ask")
-def ask(q: Question):
+def ask(q: Question, _user: dict = Depends(require_global_user)):
     results = search(q.query)
 
     ctx_parts = []
@@ -106,13 +111,13 @@ QUESTION: {q.query}""", temperature=0.2, max_tokens=2000)
 
 
 @app.get("/api/search")
-def api_search(q: str, top_k: int = 10):
+def api_search(q: str, top_k: int = 10, _user: dict = Depends(require_global_user)):
     results = search(q, top_k)
     return [{"score": round(s, 3), "source": m.get("source", "?"), "type": m.get("type", "?"), "text": m["text"][:300]} for s, m in results]
 
 
 @app.get("/api/stats")
-def stats():
+def stats(_user: dict = Depends(require_global_user)):
     type_counts = {}
     for c in metadata:
         t = c.get("type", "?")
@@ -123,7 +128,7 @@ def stats():
 # ── V2 endpoints (hybrid with Knowledge Graph) ───────────────────────
 
 @app.post("/api/ask/v2")
-def ask_v2(q: Question):
+def ask_v2(q: Question, _user: dict = Depends(require_global_user)):
     """Hybrid retrieval: graph traversal + vector search."""
     from retriever import retrieve, detect_intent
 
@@ -199,7 +204,7 @@ QUESTION: {q.query}"""
 
 
 @app.get("/api/machine/{erp_id}")
-def get_machine(erp_id: str):
+def get_machine(erp_id: str, _user: dict = Depends(require_global_user)):
     """Full machine context from knowledge graph."""
     try:
         from db import db
@@ -232,7 +237,7 @@ def get_machine(erp_id: str):
 
 
 @app.get("/api/part/{nummer}")
-def get_part(nummer: str):
+def get_part(nummer: str, _user: dict = Depends(require_global_user)):
     """Part context + usage history from knowledge graph."""
     try:
         from db import db
@@ -267,7 +272,7 @@ def get_part(nummer: str):
 
 
 @app.get("/api/graph/stats")
-def graph_stats():
+def graph_stats(_user: dict = Depends(require_global_user)):
     """Node and relationship counts from the knowledge graph."""
     try:
         from db import db

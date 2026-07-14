@@ -9,6 +9,13 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from auth import get_current_user
+from authorization import (
+    require_proto_asset,
+    require_proto_chat,
+    require_proto_document,
+    require_proto_machine,
+    require_proto_section,
+)
 from proto import resolve_cache, resolve_source
 from proto.answer import chat_answer as generate_chat_answer
 from proto.chat_store import (
@@ -19,7 +26,7 @@ from proto.chat_store import (
     list_sessions,
     retrieve_memory,
 )
-from proto.retriever import get_section, list_machines
+from proto.retriever import list_machines
 
 router = APIRouter(prefix="/api/proto", tags=["proto"])
 
@@ -45,11 +52,12 @@ class ProtoChatMessageRequest(BaseModel):
 
 
 @router.post("/ask")
-def ask(q: ProtoQuery):
-    user = {"username": "compat", "role": "viewer"}
+def ask(q: ProtoQuery, user: dict = Depends(get_current_user)):
+    machine = require_proto_machine(user, q.machine_slug) if q.machine_slug else None
     session = create_session(
         machine_slug=q.machine_slug,
-        customer=q.customer,
+        customer=(machine or {}).get("customer"),
+        client_id=(machine or {}).get("client_id"),
         title=q.query,
         user=user,
     )
@@ -61,9 +69,11 @@ def ask(q: ProtoQuery):
         transcript=messages,
         memories=memories,
         machine_slug=q.machine_slug,
-        customer=q.customer,
+        customer=(machine or {}).get("customer"),
         top_k=q.top_k,
         deep=q.deep,
+        all_clients=bool(user.get("all_clients")),
+        client_ids=list(user.get("client_ids") or []),
     )
     assistant_message = append_message(
         session_id=session["id"],
@@ -83,9 +93,11 @@ def ask(q: ProtoQuery):
 
 @router.post("/chats")
 def create_chat(req: ProtoChatCreate, current_user: dict = Depends(get_current_user)):
+    machine = require_proto_machine(current_user, req.machine_slug) if req.machine_slug else None
     session = create_session(
         machine_slug=req.machine_slug,
-        customer=req.customer,
+        customer=(machine or {}).get("customer"),
+        client_id=(machine or {}).get("client_id"),
         title=req.title,
         user=current_user,
     )
@@ -98,16 +110,17 @@ def chats(
     customer: str | None = None,
     current_user: dict = Depends(get_current_user),
 ):
-    _ = current_user
-    return list_sessions(machine_slug=machine_slug, customer=customer)
+    machine = require_proto_machine(current_user, machine_slug) if machine_slug else None
+    return list_sessions(
+        machine_slug=machine_slug,
+        customer=(machine or {}).get("customer") if machine_slug else None,
+        user=current_user,
+    )
 
 
 @router.get("/chats/{chat_id}")
 def chat(chat_id: str, current_user: dict = Depends(get_current_user)):
-    _ = current_user
-    session = get_session(chat_id)
-    if not session:
-        raise HTTPException(404, "Chat not found")
+    session = require_proto_chat(current_user, chat_id)
     return {"session": session, "messages": list_messages(chat_id)}
 
 
@@ -117,9 +130,9 @@ def chat_message(
     req: ProtoChatMessageRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    session = get_session(chat_id)
-    if not session:
-        raise HTTPException(404, "Chat not found")
+    session = require_proto_chat(current_user, chat_id)
+    if int(session.get("isolation_version") or 0) < 2:
+        raise HTTPException(409, "Legacy chats are read-only; create a new machine-scoped chat")
     text = req.text.strip()
     if not text:
         raise HTTPException(400, "Message text is required")
@@ -140,6 +153,8 @@ def chat_message(
         customer=session.get("customer"),
         top_k=req.top_k,
         deep=req.deep,
+        all_clients=bool(current_user.get("all_clients")),
+        client_ids=list(current_user.get("client_ids") or []),
     )
     assistant_message = append_message(
         session_id=chat_id,
@@ -163,17 +178,23 @@ def chat_message(
 
 
 @router.get("/machines")
-def machines():
-    return list_machines()
+def machines(current_user: dict = Depends(get_current_user)):
+    return list_machines(
+        all_clients=bool(current_user.get("all_clients")),
+        client_ids=list(current_user.get("client_ids") or []),
+    )
 
 
 @router.get("/customer")
-def customer_overview():
+def customer_overview(current_user: dict = Depends(get_current_user)):
     """Customer info + aggregated KB stats for the Proto graph."""
     from db_helpers import result_to_dicts
     from proto.db_proto import proto_db
 
-    machines = list_machines()
+    machines = list_machines(
+        all_clients=bool(current_user.get("all_clients")),
+        client_ids=list(current_user.get("client_ids") or []),
+    )
     total_pages = sum(m.get("sections") or 0 for m in machines)
     total_imgs = sum(m.get("imgs") or 0 for m in machines)
     total_cfgs = sum(m.get("txts") or 0 for m in machines)
@@ -249,18 +270,13 @@ def customer_overview():
 
 
 @router.get("/section/{section_id}")
-def section(section_id: str):
-    s = get_section(section_id)
-    if not s:
-        raise HTTPException(404, "Section not found")
-    return s
+def section(section_id: str, current_user: dict = Depends(get_current_user)):
+    return require_proto_section(current_user, section_id)
 
 
 @router.get("/page-image/{section_id}")
-def page_image(section_id: str):
-    s = get_section(section_id)
-    if not s:
-        raise HTTPException(404, "Section not found")
+def page_image(section_id: str, current_user: dict = Depends(get_current_user)):
+    s = require_proto_section(current_user, section_id)
     png = resolve_cache(s.get("png_path") or "")
     if not png or not os.path.exists(png):
         raise HTTPException(404, "PNG missing")
@@ -268,23 +284,19 @@ def page_image(section_id: str):
 
 
 @router.get("/view/{doc_id}", response_class=HTMLResponse)
-def document_viewer(doc_id: str, page: int = 1):
+def document_viewer(
+    doc_id: str,
+    page: int = 1,
+    current_user: dict = Depends(get_current_user),
+):
     """HTML wrapper that embeds the PDF with an explicit page jump.
 
     Works reliably across Chrome/Safari/Firefox — the nested iframe receives
     the `#page=N` fragment, which the browser's PDF plugin honors.
     """
-    from db_helpers import result_to_dicts
-    from proto.db_proto import proto_db
-    result = proto_db.query(
-        "MATCH (d:Document {id: $id}) RETURN d.name AS name, d.kind AS kind",
-        {"id": doc_id},
-    )
-    rows = result_to_dicts(result)
-    if not rows:
-        raise HTTPException(404, "Document not found")
-    name = html.escape(rows[0].get("name") or "document")
-    kind = rows[0].get("kind")
+    document = require_proto_document(current_user, doc_id)
+    name = html.escape(document.get("name") or "document")
+    kind = document.get("kind")
     page = max(1, int(page))
     src = f"/api/proto/document/{doc_id}#page={page}&zoom=page-fit&view=FitH"
 
@@ -319,19 +331,11 @@ def document_viewer(doc_id: str, page: int = 1):
 
 
 @router.get("/document/{doc_id}")
-def document_file(doc_id: str):
-    from db_helpers import result_to_dicts
-    from proto.db_proto import proto_db
-    result = proto_db.query(
-        "MATCH (d:Document {id: $id}) RETURN d.path AS path, d.name AS name, d.kind AS kind",
-        {"id": doc_id},
-    )
-    rows = result_to_dicts(result)
-    if not rows:
-        raise HTTPException(404, "Document not found")
-    p = resolve_source(rows[0].get("path") or "")
-    name = rows[0].get("name") or "document"
-    kind = rows[0].get("kind")
+def document_file(doc_id: str, current_user: dict = Depends(get_current_user)):
+    document = require_proto_document(current_user, doc_id)
+    p = resolve_source(document.get("path") or "")
+    name = document.get("name") or "document"
+    kind = document.get("kind")
     if not p or not os.path.exists(p):
         raise HTTPException(404, "File missing")
 
@@ -353,17 +357,9 @@ def document_file(doc_id: str):
 
 
 @router.get("/asset-image/{asset_id}")
-def asset_image(asset_id: str):
-    from proto.db_proto import proto_db
-    from db_helpers import result_to_dicts
-    result = proto_db.query(
-        "MATCH (i:ImageAsset {id: $id}) RETURN i.path AS path, i.name AS name",
-        {"id": asset_id},
-    )
-    rows = result_to_dicts(result)
-    if not rows:
-        raise HTTPException(404, "Asset not found")
-    p = resolve_source(rows[0].get("path") or "")
+def asset_image(asset_id: str, current_user: dict = Depends(get_current_user)):
+    asset = require_proto_asset(current_user, asset_id)
+    p = resolve_source(asset.get("path") or "")
     if not p or not os.path.exists(p):
         raise HTTPException(404, "File missing")
     ext = Path(p).suffix.lower().lstrip(".")
@@ -381,6 +377,16 @@ def asset_image(asset_id: str):
 
 
 @router.get("/stats")
-def stats():
+def stats(current_user: dict = Depends(get_current_user)):
     from proto.db_proto import proto_db
-    return proto_db.stats()
+    if current_user.get("all_clients"):
+        return proto_db.stats()
+    machines = list_machines(all_clients=False, client_ids=current_user.get("client_ids") or [])
+    return {
+        "nodes": {
+            "Machine": len(machines),
+            "Document": sum(int(m.get("docs") or 0) for m in machines),
+            "ManualSection": sum(int(m.get("sections") or 0) for m in machines),
+        },
+        "relationships": {},
+    }

@@ -35,6 +35,7 @@ done
 
 # Seed ERP data (idempotent — skips if already populated)
 cd /app
+python -c "from schema import apply_indexes; apply_indexes()" || true
 ERP_SEED_FILE=${ERP_SEED_FILE:-/app/data/demo_subset.json}
 if [ -f "$ERP_SEED_FILE" ]; then
   EXISTING=$(python -c "
@@ -42,9 +43,6 @@ from db import db
 db.connect()
 print(db.node_count('Machine'))
 " 2>/dev/null || echo "0")
-
-  echo "[entrypoint] seeding users (idempotent)..."
-  python -c "from seed_users import seed; seed()" || true
 
   if [ "$EXISTING" = "0" ]; then
     echo "[entrypoint] seeding ERP schema + indexes..."

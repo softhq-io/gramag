@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from ai_client import chat
-from auth import get_current_user
+from auth import get_current_user, scope_params
+from authorization import require_erp_machine
 from db import db
 from db_helpers import result_to_dicts, result_single
 
@@ -20,8 +21,21 @@ router = APIRouter(prefix="/api/erp", tags=["erp"])
 # ── Graph Stats ─────────────────────────────────────────────────────
 
 @router.get("/stats")
-def erp_stats():
+def erp_stats(user: dict = Depends(get_current_user)):
     try:
+        if not user.get("all_clients"):
+            row = result_single(db.query("""
+                MATCH (c:Customer)-[:OWNS]->(m:Machine)
+                WHERE c.erp_id IN $client_ids
+                OPTIONAL MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m)
+                RETURN count(DISTINCT c) AS customers,
+                       count(DISTINCT m) AS machines,
+                       count(DISTINCT sj) AS service_jobs
+            """, scope_params(user))) or {}
+            return {"nodes": {"Customer": row.get("customers", 0),
+                               "Machine": row.get("machines", 0),
+                               "ServiceJob": row.get("service_jobs", 0)},
+                    "relationships": {}}
         return db.stats()
     except Exception as e:
         return {"error": str(e)}
@@ -30,10 +44,12 @@ def erp_stats():
 # ── Machine ─────────────────────────────────────────────────────────
 
 @router.get("/machines")
-def list_machines(_user: dict = Depends(get_current_user)):
+def list_machines(user: dict = Depends(get_current_user)):
     result = db.query("""
         MATCH (m:Machine)
         OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
+        WITH m, c
+        WHERE $all_clients OR c.erp_id IN $client_ids
         OPTIONAL MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m)
         WITH m, c, count(sj) AS job_count
         RETURN m.erp_id AS erp_id, m.title AS title,
@@ -41,12 +57,13 @@ def list_machines(_user: dict = Depends(get_current_user)):
                c.name AS customer, c.erp_id AS customer_erp_id,
                job_count
         ORDER BY m.title
-    """)
+    """, scope_params(user))
     return result_to_dicts(result)
 
 
 @router.get("/machine/{erp_id}")
-def machine_detail(erp_id: str, _user: dict = Depends(get_current_user)):
+def machine_detail(erp_id: str, user: dict = Depends(get_current_user)):
+    require_erp_machine(user, erp_id)
     result = db.query("""
         MATCH (m:Machine {erp_id: $erp_id})
         OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
@@ -68,8 +85,9 @@ def machine_detail(erp_id: str, _user: dict = Depends(get_current_user)):
 def service_history(
     erp_id: str,
     limit: int = Query(20, ge=1, le=100),
-    _user: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
+    require_erp_machine(user, erp_id)
     result = db.query("""
         MATCH (m:Machine {erp_id: $erp_id})
         MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m)
@@ -90,7 +108,8 @@ def service_history(
 
 
 @router.get("/machine/{erp_id}/parts")
-def machine_parts(erp_id: str, _user: dict = Depends(get_current_user)):
+def machine_parts(erp_id: str, user: dict = Depends(get_current_user)):
+    require_erp_machine(user, erp_id)
     result = db.query("""
         MATCH (m:Machine {erp_id: $erp_id})
         MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m)
@@ -110,11 +129,14 @@ def machine_parts(erp_id: str, _user: dict = Depends(get_current_user)):
 # ── Part ────────────────────────────────────────────────────────────
 
 @router.get("/part/{nummer}")
-def part_detail(nummer: str, _user: dict = Depends(get_current_user)):
+def part_detail(nummer: str, user: dict = Depends(get_current_user)):
     result = db.query("""
         MATCH (p:Part {nummer: $nummer})
-        OPTIONAL MATCH (sj:ServiceJob)-[u:USED_PART]->(p)
-        OPTIONAL MATCH (sj)-[:FOR_MACHINE]->(m:Machine)
+        MATCH (sj:ServiceJob)-[u:USED_PART]->(p)
+        MATCH (sj)-[:FOR_MACHINE]->(m:Machine)
+        OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
+        WITH p, sj, m, c
+        WHERE $all_clients OR c.erp_id IN $client_ids
         WITH p,
              collect(DISTINCT {machine: m.title, machine_erp_id: m.erp_id,
                                job: sj.title, date: sj.date})[0..15] AS usage,
@@ -122,7 +144,7 @@ def part_detail(nummer: str, _user: dict = Depends(get_current_user)):
         RETURN p.titel AS titel, p.nummer AS nummer,
                p.manufacturer_nr AS manufacturer_nr,
                usage_count, usage
-    """, {"nummer": nummer})
+    """, scope_params(user, nummer=nummer))
     row = result_single(result)
     if not row:
         return {"error": "Part not found"}
@@ -134,18 +156,21 @@ def part_detail(nummer: str, _user: dict = Depends(get_current_user)):
 @router.get("/search")
 def search(
     q: str = Query(..., min_length=1),
-    _user: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
     machines = []
     try:
         r = db.query("""
             CALL db.idx.fulltext.queryNodes('Machine', $q)
             YIELD node, score
-            WITH node AS m, score ORDER BY score DESC LIMIT 5
+            WITH node AS m, score
             OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
+            WITH m, c, score
+            WHERE $all_clients OR c.erp_id IN $client_ids
             RETURN m.erp_id AS erp_id, m.title AS title,
                    c.name AS customer, score
-        """, {"q": q})
+            ORDER BY score DESC LIMIT 5
+        """, scope_params(user, q=q))
         machines = result_to_dicts(r)
     except Exception:
         pass
@@ -155,10 +180,15 @@ def search(
         r = db.query("""
             CALL db.idx.fulltext.queryNodes('Part', $q)
             YIELD node, score
-            WITH node AS p, score ORDER BY score DESC LIMIT 5
-            WHERE NOT p.noise
-            RETURN p.nummer AS nummer, p.titel AS titel, score
-        """, {"q": q})
+            WITH node AS p, score
+            MATCH (sj:ServiceJob)-[:USED_PART]->(p)
+            MATCH (sj)-[:FOR_MACHINE]->(m:Machine)
+            OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
+            WITH p, score, c
+            WHERE NOT p.noise AND ($all_clients OR c.erp_id IN $client_ids)
+            RETURN p.nummer AS nummer, p.titel AS titel, max(score) AS score
+            ORDER BY score DESC LIMIT 5
+        """, scope_params(user, q=q))
         parts = result_to_dicts(r)
     except Exception:
         pass
@@ -173,7 +203,7 @@ class AskRequest(BaseModel):
     machine_erp_id: str | None = None
 
 
-def _erp_graph_context(query: str, machine_erp_id: str | None = None) -> list[dict]:
+def _erp_graph_context(query: str, machine_erp_id: str | None, user: dict) -> list[dict]:
     """Graph traversal on ERP data for machines, parts, service history."""
     results = []
 
@@ -216,6 +246,8 @@ def _erp_graph_context(query: str, machine_erp_id: str | None = None) -> list[di
             pass
         return results
 
+    if not user.get("all_clients"):
+        return results
     try:
         from retriever import detect_intent, get_machine_context, get_part_context
         intent = detect_intent(query)
@@ -235,11 +267,30 @@ def _erp_graph_context(query: str, machine_erp_id: str | None = None) -> list[di
     return results
 
 
-def _proto_kb_context(query: str, top_k: int = 6) -> list[dict]:
+def _proto_kb_context(
+    query: str, user: dict, machine_erp_id: str | None = None, top_k: int = 6
+) -> list[dict]:
     """Vector search on proto KB (supplier manuals)."""
     try:
         from proto.retriever import retrieve as proto_retrieve
-        hits = proto_retrieve(query, top_k=top_k)
+        machine_slug = None
+        if machine_erp_id:
+            from proto.db_proto import proto_db
+            linked = result_single(proto_db.query("""
+                MATCH (m:Machine)
+                WHERE m.erp_id = $erp_id OR $erp_id IN coalesce(m.erp_related_ids, [])
+                RETURN m.slug AS slug LIMIT 1
+            """, {"erp_id": machine_erp_id}))
+            machine_slug = (linked or {}).get("slug")
+            if not machine_slug:
+                return []
+        hits = proto_retrieve(
+            query,
+            top_k=top_k,
+            machine_slug=machine_slug,
+            all_clients=bool(user.get("all_clients")),
+            client_ids=list(user.get("client_ids") or []),
+        )
         results = []
         for h in hits:
             text = h.get("merged") or h.get("text") or h.get("vision_desc") or ""
@@ -260,10 +311,12 @@ def _proto_kb_context(query: str, top_k: int = 6) -> list[dict]:
 
 
 @router.post("/ask")
-def ask(req: AskRequest, _user: dict = Depends(get_current_user)):
+def ask(req: AskRequest, user: dict = Depends(get_current_user)):
     """Hybrid Q&A: ERP graph traversal + proto KB vector search."""
-    erp_results = _erp_graph_context(req.query, req.machine_erp_id)
-    kb_results = _proto_kb_context(req.query, top_k=6)
+    if req.machine_erp_id:
+        require_erp_machine(user, req.machine_erp_id)
+    erp_results = _erp_graph_context(req.query, req.machine_erp_id, user)
+    kb_results = _proto_kb_context(req.query, user, req.machine_erp_id, top_k=6)
 
     erp_parts = []
     kb_parts = []

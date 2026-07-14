@@ -28,6 +28,7 @@ INDEX_DIR = os.getenv("INDEX_DIR", "/Users/piotrzwolinski/projects/gramag/index"
 JWT_SECRET = os.getenv("JWT_SECRET", "gramag-dev-secret-change-in-prod")
 JWT_ACCESS_EXPIRE_HOURS = int(os.getenv("JWT_ACCESS_EXPIRE_HOURS", 8))
 JWT_REFRESH_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_EXPIRE_DAYS", 7))
+AUTH_COOKIE_SECURE = os.getenv("AUTH_COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
 
 # Noise articles (shipping, travel, service hours — not real spare parts)
 NOISE_KEYWORDS = [

@@ -1,5 +1,11 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { login as apiLogin, fetchMe, logout as apiLogout, type User } from '../api/auth'
+import {
+  changeInitialPassword as apiChangeInitialPassword,
+  login as apiLogin,
+  fetchMe,
+  logout as apiLogout,
+  type User,
+} from '../api/auth'
 import { AuthContext } from './authContextValue'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -21,8 +27,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const login = async (username: string, password: string) => {
-    const u = await apiLogin(username, password)
+  const login = async (email: string, password: string) => {
+    const result = await apiLogin(email, password)
+    if (result.user) setUser(result.user)
+    return { passwordChangeToken: result.passwordChangeToken }
+  }
+
+  const changeInitialPassword = async (token: string, password: string) => {
+    const u = await apiChangeInitialPassword(token, password)
     setUser(u)
   }
 
@@ -32,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, changeInitialPassword, logout }}>
       {children}
     </AuthContext.Provider>
   )

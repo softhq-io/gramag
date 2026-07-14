@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from auth_router import router as auth_router
+from admin_router import router as admin_router
 from proto.db_proto import proto_db
 from proto.router import router as proto_router
 from erp_router import router as erp_router
@@ -28,6 +29,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(proto_router)
 app.include_router(erp_router)
 app.include_router(mission_router)
@@ -56,15 +58,16 @@ def startup():
 def health():
     result = {"status": "ok"}
     try:
-        result["proto_graph"] = proto_db.stats()
-    except Exception as e:
-        result["proto_graph_error"] = str(e)
+        proto_db.query("RETURN 1 AS ok")
+        result["proto_graph"] = "ok"
+    except Exception:
+        result["proto_graph"] = "unavailable"
     try:
         from db import db
-        result["erp_graph"] = db.stats()
-    except Exception as e:
-        result["erp_graph_error"] = str(e)
-    if "proto_graph_error" in result and "erp_graph_error" in result:
+        result["erp_graph"] = "ok" if db.verify() else "unavailable"
+    except Exception:
+        result["erp_graph"] = "unavailable"
+    if result.get("proto_graph") != "ok" and result.get("erp_graph") != "ok":
         result["status"] = "degraded"
     return result
 

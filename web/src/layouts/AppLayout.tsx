@@ -28,6 +28,9 @@ export function AppLayout() {
           )}
         </nav>
         <div className="topbar-right">
+          {user?.role === 'superadmin' && (
+            <a href="/einsatzplaner/admin/users" className="topbar-nav-link">Users</a>
+          )}
           <LanguageToggle />
           {user && (
             <>

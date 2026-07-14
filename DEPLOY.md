@@ -111,17 +111,57 @@ FalkorDB boots reading `/data/falkor/dump.rdb`, uvicorn serves `/`, frontend
 is at `/einsatzplaner/proto`. First request wakes the machine from
 `auto_stop_machines = "suspend"`.
 
-## 8. Seed a login user (one time)
+## 8. Bootstrap the first superadmin (one time)
 
 ```bash
-fly ssh console -C "cd /app && python seed_users.py"
+fly ssh console -C "cd /app && python manage_users.py bootstrap --email admin@example.com --name Admin"
+```
+
+The command prints a temporary password once. Sign in and replace it immediately.
+
+Before any migration write, run the environment's data-backup workflow and wait
+for it to finish successfully. For Azure staging this is the manual
+`Backup Staging Data` GitHub Actions workflow; it forces FalkorDB persistence
+and snapshots both Azure File shares.
+
+After verifying the superadmin, preview the legacy-user migration and Proto links:
+
+```bash
+fly ssh console -C "cd /app && python proto_erp_link.py --dry-run"
+fly ssh console -C "cd /app && python manage_users.py migrate-legacy --dry-run"
+```
+
+The legacy migration updates existing user nodes in place. It preserves their
+password hashes, keeps their usernames as login identifiers, activates them with
+the `all_clients` role, and never deletes business or chat data. If no real email
+is supplied, a unique `@legacy.invalid` alias is used. Real emails can be mapped
+explicitly during both preview and execution:
+
+```bash
+fly ssh console -C "cd /app && python manage_users.py migrate-legacy --dry-run --email admin=admin@example.com --email techniker=service@example.com"
+```
+
+After reviewing both dry-run reports and confirming the backup snapshot exists:
+
+```bash
+fly ssh console -C "cd /app && python proto_erp_link.py"
+fly ssh console -C "cd /app && python manage_users.py migrate-legacy --email admin=admin@example.com --email techniker=service@example.com"
+```
+
+Review the dry-run report before writing links. Regular users fail closed for
+Proto machines that do not have a stable `erp_customer_id`.
+
+For shell-only recovery of an existing superadmin:
+
+```bash
+fly ssh console -C "cd /app && python manage_users.py recover --email admin@example.com"
 ```
 
 ## 9. Verify
 
 ```bash
 curl https://gramag-proto.fly.dev/health
-# { "status": "ok", "graph": { "nodes": {...} } }
+# { "status": "ok" }
 ```
 
 Open `https://gramag-proto.fly.dev/einsatzplaner/proto`, log in, test a query.

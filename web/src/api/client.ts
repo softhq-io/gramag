@@ -10,7 +10,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 
   const res = await fetch(`${BASE}${path}`, { ...opts, headers })
 
-  if (res.status === 401) {
+  if (res.status === 401 && !path.startsWith('/auth/')) {
     // Try refresh
     const refreshed = await tryRefresh()
     if (refreshed) {
@@ -56,4 +56,8 @@ export function get<T>(path: string) {
 
 export function post<T>(path: string, body: unknown) {
   return request<T>(path, { method: 'POST', body: JSON.stringify(body) })
+}
+
+export function patch<T>(path: string, body: unknown) {
+  return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
 }

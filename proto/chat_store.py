@@ -45,6 +45,7 @@ def create_session(
     *,
     machine_slug: str | None,
     customer: str | None,
+    client_id: str | None,
     title: str | None,
     user: dict,
 ) -> dict:
@@ -52,25 +53,32 @@ def create_session(
     session_id = _new_id("chat")
     clean_title = (title or "Neue Unterhaltung").strip()[:120]
     username = user.get("username") or "anonymous"
+    username = user.get("email") or username
+    user_id = user.get("id") or username
     proto_db.write(
         """
         CREATE (s:ProtoChatSession {
           id: $id,
           machine_slug: $machine_slug,
           customer: $customer,
+          client_id: $client_id,
           title: $title,
           created_at: $now,
           updated_at: $now,
-          created_by: $username
+          created_by: $username,
+          created_by_id: $user_id,
+          isolation_version: 2
         })
         """,
         {
             "id": session_id,
             "machine_slug": machine_slug,
             "customer": customer,
+            "client_id": client_id,
             "title": clean_title,
             "now": now,
             "username": username,
+            "user_id": user_id,
         },
     )
     if machine_slug:
@@ -85,6 +93,7 @@ def create_session(
         "id": session_id,
         "machine_slug": machine_slug,
         "customer": customer,
+        "client_id": client_id,
         "title": clean_title,
         "created_at": now,
         "updated_at": now,
@@ -120,14 +129,22 @@ def list_sessions(
     *,
     machine_slug: str | None,
     customer: str | None,
+    user: dict,
     limit: int = 30,
 ) -> list[dict]:
     return result_to_dicts(
         proto_db.query(
             """
             MATCH (s:ProtoChatSession)
+            OPTIONAL MATCH (m:Machine)
+            WHERE m.slug = s.machine_slug
+            WITH s, m
             WHERE ($machine_slug IS NULL OR s.machine_slug = $machine_slug)
               AND ($customer IS NULL OR coalesce(s.customer, '') = $customer)
+              AND ($all_clients
+                   OR (coalesce(s.isolation_version, 0) >= 2 AND
+                       ((m.slug IS NOT NULL AND m.erp_customer_id IN $client_ids)
+                        OR (m.slug IS NULL AND s.created_by_id = $user_id))))
             OPTIONAL MATCH (s)-[:HAS_MESSAGE]->(msg:ProtoChatMessage)
             WITH s, count(msg) AS message_count, max(msg.created_at) AS last_message_at
             RETURN s.id AS id,
@@ -142,7 +159,9 @@ def list_sessions(
             ORDER BY coalesce(last_message_at, s.updated_at) DESC
             LIMIT $limit
             """,
-            {"machine_slug": machine_slug, "customer": customer, "limit": limit},
+            {"machine_slug": machine_slug, "customer": customer, "limit": limit,
+             "all_clients": bool(user.get("all_clients")),
+             "client_ids": list(user.get("client_ids") or []), "user_id": user["id"]},
         )
     )
 
@@ -197,7 +216,7 @@ def append_message(
 ) -> dict:
     now = _now()
     message_id = _new_id("msg")
-    username = user.get("username") or "anonymous"
+    username = user.get("email") or user.get("username") or "anonymous"
     user_role = user.get("role") or "viewer"
     params = {
         "session_id": session_id,
@@ -249,31 +268,22 @@ def retrieve_memory(
     limit: int = 6,
     min_score: float = 0.55,
 ) -> list[dict]:
-    query_emb = generate_query_embedding(query)
     machine_slug = session.get("machine_slug")
-    customer = session.get("customer")
     current_session_id = session.get("id")
-
-    def run(scope: str) -> list[dict]:
-        if scope == "machine" and not machine_slug:
-            return []
-        if scope == "customer" and not customer:
-            return []
-        where = {
-            "machine": "s.machine_slug = $machine_slug",
-            "customer": "coalesce(s.customer, '') = $customer",
-            "global": "true",
-        }[scope]
-        try:
-            rows = result_to_dicts(
-                proto_db.query(
-                    f"""
+    if not machine_slug:
+        return []
+    query_emb = generate_query_embedding(query)
+    try:
+        rows = result_to_dicts(
+            proto_db.query(
+                    """
                     CALL db.idx.vector.queryNodes(
                         'ProtoChatMessage', 'embedding', $k, vecf32($emb)
                     ) YIELD node AS msg, score
                     MATCH (s:ProtoChatSession)-[:HAS_MESSAGE]->(msg)
                     WHERE s.id <> $session_id
-                      AND {where}
+                      AND s.machine_slug = $machine_slug
+                      AND coalesce(s.isolation_version, 0) >= 2
                     RETURN msg.id AS id,
                            msg.session_id AS session_id,
                            msg.role AS role,
@@ -294,18 +304,10 @@ def retrieve_memory(
                         "k": limit,
                         "session_id": current_session_id,
                         "machine_slug": machine_slug,
-                        "customer": customer,
                     },
                 )
             )
-        except Exception as e:
-            print(f"chat memory search failed ({scope}): {e}")
-            return []
-        return [row for row in rows if float(row.get("score") or 0) >= min_score]
-
-    machine_hits = run("machine")
-    if machine_hits:
-        return machine_hits[:limit]
-
-    customer_hits = run("customer")
-    return customer_hits[:limit]
+    except Exception as e:
+        print(f"chat memory search failed (machine): {e}")
+        return []
+    return [row for row in rows if float(row.get("score") or 0) >= min_score][:limit]

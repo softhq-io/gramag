@@ -3,27 +3,26 @@
 Multi-hop graph reasoning + AI briefing generation for service technicians.
 """
 
-import json
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from ai_client import chat, json_chat
+from concurrent.futures import ThreadPoolExecutor
+from ai_client import chat
 from db import db
 from db_helpers import result_to_dicts, result_single
-from retriever import graph_vector_search
-from embeddings import generate_query_embedding
+from auth import scope_params
 
 
 # ── Search ───────────────────────────────────────────────────────────
 
 
-def search_machines(query: str, limit: int = 10) -> list[dict]:
+def search_machines(query: str, limit: int = 10, user: dict | None = None) -> list[dict]:
     """Fulltext search on Machine.title, returns machine + customer + type + brand."""
     result = db.query(
         """
         CALL db.idx.fulltext.queryNodes('Machine', $query)
         YIELD node, score
         WITH node AS m, score
-        ORDER BY score DESC LIMIT $limit
         OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
+        WITH m, c, score
+        WHERE $all_clients OR c.erp_id IN $client_ids
         OPTIONAL MATCH (m)-[:IS_TYPE]->(mt:MachineType)
         OPTIONAL MATCH (m)-[:MADE_BY]->(mb:MachineBrand)
         RETURN m.erp_id AS erp_id, m.title AS title,
@@ -31,25 +30,27 @@ def search_machines(query: str, limit: int = 10) -> list[dict]:
                c.name AS customer, c.erp_id AS customer_erp_id,
                mt.name AS machine_type, mb.name AS brand,
                score
+        ORDER BY score DESC LIMIT $limit
         """,
-        {"query": query, "limit": limit},
+        scope_params(user or {"all_clients": False}, query=query, limit=limit),
     )
     return result_to_dicts(result)
 
 
-def search_customers(query: str, limit: int = 10) -> list[dict]:
+def search_customers(query: str, limit: int = 10, user: dict | None = None) -> list[dict]:
     """Fulltext search on Customer.name, returns customer + machine count."""
     result = db.query(
         """
         CALL db.idx.fulltext.queryNodes('Customer', $query)
         YIELD node, score
         WITH node AS c, score
-        ORDER BY score DESC LIMIT $limit
+        WHERE $all_clients OR c.erp_id IN $client_ids
         OPTIONAL MATCH (c)-[:OWNS]->(m:Machine)
         RETURN c.erp_id AS erp_id, c.name AS name, c.city AS city,
                count(m) AS machine_count, score
+        ORDER BY score DESC LIMIT $limit
         """,
-        {"query": query, "limit": limit},
+        scope_params(user or {"all_clients": False}, query=query, limit=limit),
     )
     return result_to_dicts(result)
 
@@ -75,129 +76,6 @@ def get_machine_detail(erp_id: str) -> dict | None:
     return result_single(result)
 
 
-# ── Similar Cases ────────────────────────────────────────────────────
-
-
-def find_similar_cases(
-    machine_erp_id: str, symptom: str = "", limit: int = 8
-) -> list[dict]:
-    """Multi-hop: find service jobs on same MachineType from other machines."""
-    result = db.query(
-        """
-        MATCH (target:Machine {erp_id: $erp_id})-[:IS_TYPE]->(mt:MachineType)
-        MATCH (other:Machine)-[:IS_TYPE]->(mt)
-        WHERE other.erp_id <> $erp_id
-        MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(other)
-        OPTIONAL MATCH (c:Customer)-[:OWNS]->(other)
-        OPTIONAL MATCH (sj)-[:USED_PART]->(p:Part)
-        WHERE NOT p.noise
-        OPTIONAL MATCH (sc:ServiceComment)-[:ON_JOB]->(sj)
-        WITH other, c, sj, mt,
-             collect(DISTINCT {nummer: p.nummer, titel: p.titel})[0..10] AS parts_used,
-             collect(DISTINCT {author: sc.author, text: sc.text, date: sc.date})[0..3] AS comments
-        ORDER BY sj.date DESC
-        LIMIT $limit
-        RETURN sj.erp_id AS job_erp_id, sj.title AS job_title,
-               sj.date AS job_date, sj.nummer AS job_nummer,
-               sj.description AS job_description,
-               other.title AS machine_title, other.erp_id AS machine_erp_id,
-               c.name AS customer,
-               mt.name AS machine_type,
-               parts_used, comments
-        """,
-        {"erp_id": machine_erp_id, "limit": limit},
-    )
-    cases = result_to_dicts(result)
-
-    # Fallback: if no IS_TYPE edges, find jobs on other machines (demo subset)
-    if not cases:
-        result = db.query(
-            """
-            MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(other:Machine)
-            WHERE other.erp_id <> $erp_id
-            OPTIONAL MATCH (c:Customer)-[:OWNS]->(other)
-            OPTIONAL MATCH (sj)-[:USED_PART]->(p:Part)
-            WHERE p IS NULL OR NOT p.noise
-            OPTIONAL MATCH (sc:ServiceComment)-[:ON_JOB]->(sj)
-            WITH other, c, sj,
-                 collect(DISTINCT {nummer: p.nummer, titel: p.titel})[0..10] AS parts_used,
-                 collect(DISTINCT {text: sc.text, date: sc.date})[0..3] AS comments
-            ORDER BY sj.date DESC
-            LIMIT $limit
-            RETURN sj.erp_id AS job_erp_id, sj.title AS job_title,
-                   sj.date AS job_date, sj.nummer AS job_nummer,
-                   sj.description AS job_description,
-                   other.title AS machine_title, other.erp_id AS machine_erp_id,
-                   c.name AS customer,
-                   'Andere Maschine' AS machine_type,
-                   parts_used, comments
-            """,
-            {"erp_id": machine_erp_id, "limit": limit},
-        )
-        cases = result_to_dicts(result)
-
-    # If symptom provided, boost cases with matching text
-    if symptom:
-        symptom_lower = symptom.lower()
-        for case in cases:
-            title = (case.get("job_title") or "").lower()
-            cmts = " ".join((c.get("text") or "") if isinstance(c, dict) else str(c) for c in (case.get("comments") or [])).lower()
-            if symptom_lower in title or symptom_lower in cmts:
-                case["symptom_match"] = True
-        # Sort: symptom matches first
-        cases.sort(key=lambda c: (not c.get("symptom_match", False)))
-
-    return cases
-
-
-def summarize_similar_cases(cases: list[dict], symptom: str = "") -> list[dict]:
-    """Generate a short LLM summary for each similar case in one batch call."""
-    if not cases:
-        return cases
-
-    lines = []
-    for i, c in enumerate(cases):
-        parts = ", ".join(
-            f"{p.get('nummer', '?')} ({p.get('titel', '')})"
-            for p in (c.get("parts_used") or [])[:5]
-        )
-        cmts = " | ".join(
-            (cm.get("text") or "")[:200]
-            for cm in (c.get("comments") or [])
-            if isinstance(cm, dict) and cm.get("text")
-        )
-        desc = (c.get("job_description") or "")[:300]
-        lines.append(
-            f"CASE {i}: [{c.get('job_date', '?')}] {c.get('job_title', '?')} "
-            f"@ {c.get('customer', '?')}\n"
-            f"  Beschreibung: {desc or 'keine'}\n"
-            f"  Teile: {parts or 'keine'}\n"
-            f"  Kommentare: {cmts or 'keine'}"
-        )
-
-    prompt = (
-        "Du bist ein Service-Assistent für Gramag (Schweiz, grafische Maschinen).\n"
-        "Fasse jeden der folgenden Service-Fälle in GENAU einem Satz zusammen.\n"
-        "Fokussiere auf: Was war das Problem? Was wurde gemacht/gelöst?\n"
-        f"{('Aktuelles Symptom: ' + symptom + chr(10)) if symptom else ''}"
-        "Antworte als JSON-Objekt mit dem Feld summaries (Array mit Strings, ein Eintrag pro Case).\n"
-        "Beispiel: {\"summaries\":[\"Riemen gerissen, ersetzt durch Teil 24046.\", \"Sensor defekt, kalibriert.\"]}\n\n"
-        + "\n\n".join(lines)
-    )
-
-    try:
-        parsed = json.loads(json_chat(prompt, temperature=0.2, max_tokens=2000))
-        summaries = parsed.get("summaries", []) if isinstance(parsed, dict) else []
-        for i, case in enumerate(cases):
-            case["llm_summary"] = summaries[i] if i < len(summaries) else ""
-    except Exception as e:
-        print(f"[WARN] summarize_similar_cases failed: {e}")
-        for case in cases:
-            case.setdefault("llm_summary", "")
-
-    return cases
-
-
 # ── Parts Kit ────────────────────────────────────────────────────────
 
 
@@ -212,12 +90,7 @@ def _is_noise_part(titel: str) -> bool:
 
 
 def build_parts_kit(machine_erp_id: str) -> dict:
-    """Three-layer parts recommendation with job context.
-
-    1. Parts used on this specific machine (sorted by frequency)
-    2. Parts used on all machines of the same type
-    3. Co-occurrence (OFTEN_USED_WITH) for top parts
-    """
+    """Parts used on this exact machine, with job context."""
     # Layer 1: this machine — with job context
     r1 = db.query(
         """
@@ -240,55 +113,10 @@ def build_parts_kit(machine_erp_id: str) -> dict:
     machine_parts = [p for p in result_to_dicts(r1)
                      if not _is_noise_part(p.get("titel", ""))]
 
-    # Layer 2: same type — with job context
-    r2 = db.query(
-        """
-        MATCH (target:Machine {erp_id: $erp_id})-[:IS_TYPE]->(mt:MachineType)
-        MATCH (other:Machine)-[:IS_TYPE]->(mt)
-        WHERE other.erp_id <> $erp_id
-        MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(other)
-        MATCH (sj)-[:USED_PART]->(p:Part)
-        WHERE NOT p.noise
-        WITH p, sj
-        ORDER BY sj.date DESC
-        WITH p, count(DISTINCT sj) AS frequency,
-             collect(DISTINCT sj.title)[0..3] AS job_titles
-        RETURN p.nummer AS nummer, p.titel AS titel,
-               p.manufacturer_nr AS manufacturer_nr,
-               frequency, job_titles
-        ORDER BY frequency DESC
-        LIMIT 20
-        """,
-        {"erp_id": machine_erp_id},
-    )
-    type_parts = [p for p in result_to_dicts(r2)
-                  if not _is_noise_part(p.get("titel", ""))]
-
-    # Layer 3: co-occurrence from top machine parts
-    co_parts = []
-    top_nummers = [p["nummer"] for p in machine_parts[:5] if p.get("nummer")]
-    if not top_nummers:
-        top_nummers = [p["nummer"] for p in type_parts[:5] if p.get("nummer")]
-    if top_nummers:
-        r3 = db.query(
-            """
-            MATCH (p:Part)-[r:OFTEN_USED_WITH]-(p2:Part)
-            WHERE p.nummer IN $nummers AND NOT p2.noise
-            RETURN DISTINCT p2.nummer AS nummer, p2.titel AS titel,
-                   p2.manufacturer_nr AS manufacturer_nr,
-                   r.count AS co_count
-            ORDER BY co_count DESC
-            LIMIT 15
-            """,
-            {"nummers": top_nummers},
-        )
-        co_parts = [p for p in result_to_dicts(r3)
-                    if not _is_noise_part(p.get("titel", ""))]
-
     return {
         "machine_parts": machine_parts,
-        "type_parts": type_parts,
-        "co_occurrence_parts": co_parts,
+        "type_parts": [],
+        "co_occurrence_parts": [],
     }
 
 
@@ -367,48 +195,41 @@ def get_service_history(machine_erp_id: str, limit: int = 20) -> list[dict]:
 
 
 def find_relevant_manuals(query: str, machine_erp_id: str = "") -> list[dict]:
-    """Vector search on ManualSection + boost for matching brand."""
-    query_emb = generate_query_embedding(query)
-    results = graph_vector_search(query_emb, top_k=20)
+    """Retrieve manuals attached to the exact ERP-linked Proto machine."""
+    if not machine_erp_id:
+        return []
+    try:
+        from proto.db_proto import proto_db
+        from proto.retriever import retrieve as proto_retrieve
 
-    # Fallback: search proto KB if main graph has no ManualSections
-    if not results:
-        try:
-            from proto.retriever import retrieve as proto_retrieve
-            hits = proto_retrieve(query, top_k=10)
-            for h in hits:
-                text = h.get("merged") or h.get("text") or h.get("vision_desc") or ""
-                if text.strip():
-                    results.append({
-                        "text": text[:600],
-                        "summary": h.get("summary", ""),
-                        "source": f"Manual: {h.get('doc_name', '?')}",
-                        "supplier": h.get("machine_slug", ""),
-                        "score": h.get("score", 0),
-                    })
-        except Exception:
-            pass
-
-    # If machine provided, boost results matching its brand
-    brand = ""
-    if machine_erp_id:
-        detail = get_machine_detail(machine_erp_id)
-        brand = ((detail or {}).get("brand") or "").lower()
-        if brand:
-            for r in results:
-                supplier = (r.get("supplier") or "").lower()
-                if brand in supplier or supplier in brand:
-                    r["score"] = r.get("score", 0) + 0.2
-                    r["brand_match"] = True
-            results.sort(key=lambda r: r.get("score", 0), reverse=True)
-
-    # If brand is known, only return brand-matching results
-    if brand:
-        results = [r for r in results if r.get("brand_match")]
-
-    # Filter out low-relevance results (brand match already ensures relevance)
-    min_score = 0.1 if brand else 0.5
-    results = [r for r in results if r.get("score", 0) >= min_score]
+        linked = result_single(
+            proto_db.query(
+                """
+                MATCH (m:Machine)
+                WHERE m.erp_id = $erp_id OR $erp_id IN coalesce(m.erp_related_ids, [])
+                RETURN m.slug AS slug LIMIT 1
+                """,
+                {"erp_id": machine_erp_id},
+            )
+        )
+        machine_slug = (linked or {}).get("slug")
+        if not machine_slug:
+            return []
+        hits = proto_retrieve(query, top_k=10, machine_slug=machine_slug, all_clients=True)
+        results = []
+        for hit in hits:
+            text = hit.get("merged") or hit.get("text") or hit.get("vision_desc") or ""
+            if text.strip():
+                results.append({
+                    "text": text[:600],
+                    "summary": hit.get("summary", ""),
+                    "source": f"Manual: {hit.get('doc_name', '?')}",
+                    "supplier": hit.get("machine_slug", ""),
+                    "score": hit.get("score", 0),
+                    "brand_match": True,
+                })
+    except Exception:
+        return []
 
     _SCHEMATIC_KEYWORDS = (
         "schematic diagram", "schematic diagrams",
@@ -472,17 +293,13 @@ def generate_briefing(machine_erp_id: str, symptom: str = "") -> dict:
         {"step": "Machine Lookup", "detail": machine.get("title", "?")}
     )
 
-    # Steps 2-5: run in parallel
+    # Exact-machine history, parts, and manuals run in parallel.
     history = []
-    similar = []
     parts_kit = {}
     manuals = []
 
     def _do_history():
         return get_service_history(machine_erp_id, limit=15)
-
-    def _do_similar():
-        return find_similar_cases(machine_erp_id, symptom=symptom, limit=8)
 
     def _do_parts():
         return build_parts_kit(machine_erp_id)
@@ -491,22 +308,17 @@ def generate_briefing(machine_erp_id: str, symptom: str = "") -> dict:
         manual_query = symptom if symptom else (machine.get("title") or "")
         return find_relevant_manuals(manual_query, machine_erp_id)
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         fut_history = pool.submit(_do_history)
-        fut_similar = pool.submit(_do_similar)
         fut_parts = pool.submit(_do_parts)
         fut_manuals = pool.submit(_do_manuals)
 
         history = fut_history.result()
-        similar = fut_similar.result()
         parts_kit = fut_parts.result()
         manuals = fut_manuals.result()
 
     reasoning_path.append(
         {"step": "Service History", "detail": f"{len(history)} jobs found"}
-    )
-    reasoning_path.append(
-        {"step": "Similar Cases", "detail": f"{len(similar)} cases from same type"}
     )
     total_parts = (
         len(parts_kit.get("machine_parts", []))
@@ -514,7 +326,7 @@ def generate_briefing(machine_erp_id: str, symptom: str = "") -> dict:
         + len(parts_kit.get("co_occurrence_parts", []))
     )
     reasoning_path.append(
-        {"step": "Parts Kit", "detail": f"{total_parts} parts across 3 layers"}
+        {"step": "Parts Kit", "detail": f"{total_parts} parts from this machine"}
     )
     reasoning_path.append(
         {"step": "Manual Refs", "detail": f"{len(manuals)} relevant sections"}
@@ -522,7 +334,7 @@ def generate_briefing(machine_erp_id: str, symptom: str = "") -> dict:
 
     # Step 6: AI summary (needs all data)
     reasoning_path.append({"step": "AI Briefing", "detail": "Generating summary..."})
-    context = _build_briefing_context(machine, history, similar, parts_kit, manuals, symptom)
+    context = _build_briefing_context(machine, history, parts_kit, manuals, symptom)
     summary = _generate_summary(context)
     reasoning_path[-1]["detail"] = "Complete"
 
@@ -531,7 +343,6 @@ def generate_briefing(machine_erp_id: str, symptom: str = "") -> dict:
         "symptom": symptom,
         "summary": summary,
         "history": history,
-        "similar_cases": similar,
         "parts_kit": parts_kit,
         "manuals": manuals,
         "reasoning_path": reasoning_path,
@@ -541,7 +352,6 @@ def generate_briefing(machine_erp_id: str, symptom: str = "") -> dict:
 def _build_briefing_context(
     machine: dict,
     history: list[dict],
-    similar: list[dict],
     parts_kit: dict,
     manuals: list[dict],
     symptom: str,
@@ -566,17 +376,6 @@ def _build_briefing_context(
             if text:
                 lines.append(f"    Comment: {text[:150]}")
 
-    lines.append(f"\nSIMILAR CASES ({len(similar)} from same machine type):")
-    for s in similar[:5]:
-        parts_text = ", ".join(
-            (p.get("nummer") or "?") for p in (s.get("parts_used") or [])[:5]
-        )
-        match_tag = " [SYMPTOM MATCH]" if s.get("symptom_match") else ""
-        lines.append(
-            f"  - [{s.get('job_date', '?')}] {s.get('job_title', '?')}{match_tag} "
-            f"@ {s.get('customer', '?')} | Parts: {parts_text or 'none'}"
-        )
-
     lines.append(f"\nTOP PARTS (this machine):")
     for p in parts_kit.get("machine_parts", [])[:10]:
         lines.append(f"  - [{p.get('nummer')}] {p.get('titel', '?')} (used {p.get('frequency', 0)}x)")
@@ -595,7 +394,7 @@ Erstelle ein prägnantes Einsatz-Briefing für den Servicetechniker basierend au
 
 Struktur:
 1. **Maschinenübersicht** — Kurze Zusammenfassung der Maschine und des Kunden
-2. **Symptom-Analyse** — Was ist das Problem? Was zeigen ähnliche Fälle?
+2. **Symptom-Analyse** — Was ist das Problem? Was zeigt die Historie dieser Maschine?
 3. **Empfohlene Teile** — Welche Ersatzteile sollte der Techniker mitnehmen?
 4. **Bekannte Lösungen** — Tipps aus der Service-Historie und Handbüchern
 5. **Hinweise** — Besondere Hinweise oder Warnungen

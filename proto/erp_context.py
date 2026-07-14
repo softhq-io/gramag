@@ -97,6 +97,8 @@ def retrieve_erp_context(
             OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
             OPTIONAL MATCH (m)-[:IS_TYPE]->(mt:MachineType)
             OPTIONAL MATCH (m)-[:MADE_BY]->(mb:MachineBrand)
+            WITH m, c, mt, mb
+            WHERE c.erp_id = $client_id
             RETURN m.erp_id AS erp_id,
                    m.title AS title,
                    m.serial_number AS serial_number,
@@ -107,11 +109,12 @@ def retrieve_erp_context(
                    mb.name AS brand
             ORDER BY m.erp_id
             """,
-            {"erp_ids": erp_ids},
+            {"erp_ids": erp_ids, "client_id": link.get("erp_customer_id")},
         )
     )
     if not machines:
         return None
+    erp_ids = [str(machine["erp_id"]) for machine in machines if machine.get("erp_id")]
 
     jobs = result_to_dicts(
         db.query(

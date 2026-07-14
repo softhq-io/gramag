@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from ai_client import chat
 from auth import get_current_user
+from authorization import require_erp_machine
 import mission
 
 router = APIRouter(prefix="/api/mission", tags=["mission"])
@@ -24,15 +25,16 @@ def search(
     q: str = Query(..., min_length=1),
     type: str = Query("machine", pattern="^(machine|customer)$"),
     limit: int = Query(10, ge=1, le=50),
-    _user: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
     if type == "customer":
-        return mission.search_customers(q, limit=limit)
-    return mission.search_machines(q, limit=limit)
+        return mission.search_customers(q, limit=limit, user=user)
+    return mission.search_machines(q, limit=limit, user=user)
 
 
 @router.get("/machine/{erp_id}")
-def machine_detail(erp_id: str, _user: dict = Depends(get_current_user)):
+def machine_detail(erp_id: str, user: dict = Depends(get_current_user)):
+    require_erp_machine(user, erp_id)
     detail = mission.get_machine_detail(erp_id)
     if not detail:
         return {"error": "Machine not found"}
@@ -40,7 +42,8 @@ def machine_detail(erp_id: str, _user: dict = Depends(get_current_user)):
 
 
 @router.post("/briefing")
-def briefing(req: BriefingRequest, _user: dict = Depends(get_current_user)):
+def briefing(req: BriefingRequest, user: dict = Depends(get_current_user)):
+    require_erp_machine(user, req.machine_erp_id)
     return mission.generate_briefing(req.machine_erp_id, req.symptom)
 
 
@@ -48,32 +51,42 @@ def briefing(req: BriefingRequest, _user: dict = Depends(get_current_user)):
 def service_history(
     erp_id: str,
     limit: int = Query(20, ge=1, le=100),
-    _user: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
 ):
+    require_erp_machine(user, erp_id)
     return mission.get_service_history(erp_id, limit=limit)
 
 
 @router.get("/machine/{erp_id}/parts-kit")
-def parts_kit(erp_id: str, _user: dict = Depends(get_current_user)):
+def parts_kit(erp_id: str, user: dict = Depends(get_current_user)):
+    require_erp_machine(user, erp_id)
     return mission.build_parts_kit(erp_id)
 
 
-@router.get("/machine/{erp_id}/similar-cases")
-def similar_cases(
-    erp_id: str,
-    symptom: str = "",
-    limit: int = Query(8, ge=1, le=30),
-    _user: dict = Depends(get_current_user),
-):
-    return mission.find_similar_cases(erp_id, symptom=symptom, limit=limit)
-
-
 @router.post("/ask")
-def free_ask(req: AskRequest, _user: dict = Depends(get_current_user)):
+def free_ask(req: AskRequest, user: dict = Depends(get_current_user)):
     """Free-form Q&A — no machine selection required."""
     from retriever import retrieve, detect_intent
 
-    results = retrieve(req.query, top_k=12)
+    if user.get("all_clients"):
+        results = retrieve(req.query, top_k=12)
+    else:
+        from proto.retriever import retrieve as proto_retrieve
+        hits = proto_retrieve(
+            req.query, top_k=12, all_clients=False,
+            client_ids=list(user.get("client_ids") or []),
+        )
+        results = [
+            {
+                **hit,
+                "source": f"Manual: {hit.get('doc_name', '?')} p.{hit.get('page', '?')}",
+                "type": "manual_section",
+                "retrieval_method": "proto_vector",
+                "text": hit.get("merged") or hit.get("text") or hit.get("vision_desc") or "",
+                "supplier": hit.get("machine_slug", ""),
+            }
+            for hit in hits
+        ]
     intent = detect_intent(req.query)
 
     graph_parts, vector_parts, sources = [], [], []
@@ -89,21 +102,6 @@ def free_ask(req: AskRequest, _user: dict = Depends(get_current_user)):
         entry = f"{label}\n{text}"
         (graph_parts if method == "graph_traversal" else vector_parts).append(entry)
         pdf_url = None
-        try:
-            from server import _pdf_path_map
-            fname = src.replace("PDF: ", "").replace("Manual: ", "").split(" p.")[0]
-            rel_path = _pdf_path_map.get(fname.lower())
-            if rel_path:
-                from urllib.parse import quote
-                page = None
-                if r.get("pages"):
-                    page = r["pages"][0] if isinstance(r["pages"], list) else r["pages"]
-                elif " p." in src:
-                    page = src.split(" p.")[-1].split("-")[0]
-                frag = f"#page={page}" if page else ""
-                pdf_url = f"/api/pdfs/{quote(rel_path)}{frag}"
-        except ImportError:
-            pass
 
         sources.append({
             "rank": i + 1, "source": src, "type": ctype,

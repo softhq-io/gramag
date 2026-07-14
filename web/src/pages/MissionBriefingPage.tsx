@@ -5,13 +5,12 @@ import { useMission } from '../hooks/useMission'
 import { MachineInfoCard } from '../components/MachineInfoCard'
 import { BriefingSummary } from '../components/BriefingSummary'
 import { ServiceHistoryCard } from '../components/ServiceHistoryCard'
-import { SimilarCasesCard } from '../components/SimilarCasesCard'
 import { PartsKitCard } from '../components/PartsKitCard'
 import { ManualRefsCard } from '../components/ManualRefsCard'
 import { PredictedNeedsCard } from '../components/PredictedNeedsCard'
 import { ReasoningPath } from '../components/ReasoningPath'
 
-const LOADING_STEP_KEYS = ['machine', 'history', 'similar', 'parts', 'manuals', 'ai'] as const
+const LOADING_STEP_KEYS = ['machine', 'history', 'parts', 'manuals', 'ai'] as const
 
 function LoadingSteps({ t }: { t: (key: string) => string }) {
   const [activeIdx, setActiveIdx] = useState(0)
@@ -105,10 +104,6 @@ export function MissionBriefingPage() {
 
           <Section id="summary" label={t('briefing.summary')} open={openSections} toggle={toggleSection}>
             <BriefingSummary summary={data.summary} />
-          </Section>
-
-          <Section id="similar" label={t('briefing.similarCases')} open={openSections} toggle={toggleSection}>
-            <SimilarCasesCard cases={data.similar_cases} />
           </Section>
 
           <Section id="history" label={t('briefing.history')} open={openSections} toggle={toggleSection}>

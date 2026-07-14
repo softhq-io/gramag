@@ -300,6 +300,7 @@ def get_fleet_dashboard(
     limit: int = 100,
     offset: int = 0,
     q: str | None = None,
+    user: dict | None = None,
 ) -> dict:
     """Build fleet health dashboard with risk scores for all machines.
 
@@ -311,6 +312,8 @@ def get_fleet_dashboard(
         "limit": limit,
         "offset": offset,
         "q": search,
+        "all_clients": bool((user or {}).get("all_clients", False)),
+        "client_ids": list((user or {}).get("client_ids") or []),
     }
     search_clause = """
         ($q = '' OR
@@ -323,6 +326,7 @@ def get_fleet_dashboard(
     if customer_id:
         machines_result = db.query("""
             MATCH (c:Customer {erp_id: $customer_id})-[:OWNS]->(m:Machine)
+            WHERE $all_clients OR c.erp_id IN $client_ids
             OPTIONAL MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m)
             WITH m, c, count(sj) AS job_count
             WHERE job_count > 0 AND
@@ -339,6 +343,7 @@ def get_fleet_dashboard(
         """, params)
         count_result = db.query(f"""
             MATCH (c:Customer {{erp_id: $customer_id}})-[:OWNS]->(m:Machine)
+            WHERE $all_clients OR c.erp_id IN $client_ids
             MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m)
             WITH DISTINCT m, c
             WHERE {search_clause}
@@ -349,7 +354,7 @@ def get_fleet_dashboard(
             MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m:Machine)
             OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
             WITH m, c, count(sj) AS job_count
-            WHERE job_count > 0 AND
+            WHERE ($all_clients OR c.erp_id IN $client_ids) AND job_count > 0 AND
                   ($q = '' OR
                    toLower(coalesce(m.title, '')) CONTAINS $q OR
                    toLower(coalesce(m.erp_id, '')) CONTAINS $q OR
@@ -365,7 +370,7 @@ def get_fleet_dashboard(
             MATCH (sj:ServiceJob)-[:FOR_MACHINE]->(m:Machine)
             OPTIONAL MATCH (c:Customer)-[:OWNS]->(m)
             WITH DISTINCT m, c
-            WHERE {search_clause}
+            WHERE ($all_clients OR c.erp_id IN $client_ids) AND {search_clause}
             RETURN count(DISTINCT m) AS total
         """, params)
 
@@ -406,13 +411,17 @@ def get_fleet_dashboard(
     return {"summary": summary, "pagination": pagination, "machines": results}
 
 
-def get_customers_list() -> list[dict]:
+def get_customers_list(user: dict | None = None) -> list[dict]:
     """Return list of customers that have machines with service history."""
     result = db.query("""
         MATCH (c:Customer)-[:OWNS]->(m:Machine)<-[:FOR_MACHINE]-(sj:ServiceJob)
+        WHERE $all_clients OR c.erp_id IN $client_ids
         WITH c, count(DISTINCT m) AS machine_count
         WHERE machine_count > 0
         RETURN c.erp_id AS erp_id, c.name AS name, machine_count
         ORDER BY c.name
-    """)
+    """, {
+        "all_clients": bool((user or {}).get("all_clients", False)),
+        "client_ids": list((user or {}).get("client_ids") or []),
+    })
     return result_to_dicts(result)
