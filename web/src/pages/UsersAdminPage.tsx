@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   createUser,
   listClients,
@@ -171,13 +171,101 @@ function ClientSelect({ clients, selected, onChange }: {
   selected: string[]
   onChange: (ids: string[]) => void
 }) {
-  return (
-    <select multiple value={selected} onChange={event => {
-      onChange(Array.from(event.currentTarget.selectedOptions, option => option.value))
-    }}>
-      {clients.map(client => (
-        <option key={client.id} value={client.id}>{client.name} ({client.machine_count})</option>
-      ))}
-    </select>
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const selectedSet = useMemo(() => new Set(selected), [selected])
+  const selectedClients = useMemo(
+    () => selected.map(id => clients.find(client => client.id === id)).filter(Boolean) as AdminClient[],
+    [clients, selected],
   )
+  const filteredClients = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase()
+    if (!needle) return clients
+    return clients.filter(client =>
+      `${client.name} ${client.id}`.toLocaleLowerCase().includes(needle),
+    )
+  }, [clients, query])
+
+  useEffect(() => {
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick)
+  }, [])
+
+  function toggle(clientId: string) {
+    onChange(selectedSet.has(clientId)
+      ? selected.filter(id => id !== clientId)
+      : [...selected, clientId])
+    setQuery('')
+  }
+
+  return (
+    <div className={`client-picker ${open ? 'open' : ''}`} ref={rootRef}>
+      <div className="client-picker-control" onClick={() => setOpen(true)}>
+        {selectedClients.map(client => (
+          <span className="client-picker-chip" key={client.id} title={`ERP ID ${client.id}`}>
+            {client.name}
+            <button type="button" aria-label={`Remove ${client.name}`} onClick={event => {
+              event.stopPropagation()
+              toggle(client.id)
+            }}>×</button>
+          </span>
+        ))}
+        <input
+          aria-label="Search clients"
+          placeholder={selected.length ? 'Add another client…' : 'Search clients…'}
+          value={query}
+          onChange={event => {
+            setQuery(event.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={event => {
+            if (event.key === 'Escape') {
+              setOpen(false)
+              event.currentTarget.blur()
+            }
+          }}
+        />
+        <span className="client-picker-chevron" aria-hidden="true">⌄</span>
+      </div>
+      {open && (
+        <div className="client-picker-menu">
+          <div className="client-picker-hint">
+            Search by client name or ERP ID · machine totals from ERP
+          </div>
+          <div className="client-picker-options" role="listbox" aria-multiselectable="true">
+            {filteredClients.map(client => (
+              <button
+                type="button"
+                role="option"
+                aria-selected={selectedSet.has(client.id)}
+                className={`client-picker-option ${selectedSet.has(client.id) ? 'selected' : ''}`}
+                key={client.id}
+                onClick={() => toggle(client.id)}
+              >
+                <span className="client-picker-check" aria-hidden="true">
+                  {selectedSet.has(client.id) ? '✓' : ''}
+                </span>
+                <span className="client-picker-option-text">
+                  <strong>{client.name}</strong>
+                  <small>ERP ID {client.id} · {machineCountLabel(client.machine_count)}</small>
+                </span>
+              </button>
+            ))}
+            {!filteredClients.length && (
+              <div className="client-picker-empty">No clients match “{query}”.</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function machineCountLabel(count: number) {
+  return `${count} ${count === 1 ? 'machine' : 'machines'}`
 }
