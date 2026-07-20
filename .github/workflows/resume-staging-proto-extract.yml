@@ -1,8 +1,6 @@
 name: Resume Staging Proto Extract
 
 on:
-  schedule:
-    - cron: "35 */2 * * *"
   workflow_dispatch:
     inputs:
       phase:
@@ -23,7 +21,7 @@ on:
       dry_run:
         description: "Plan only; do not snapshot or start jobs"
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:
@@ -47,6 +45,7 @@ jobs:
       PHASE: ${{ github.event.inputs.phase || 'birkhaeuser-pdf' }}
       MODE: ${{ github.event.inputs.mode || 'failed-or-missing' }}
       DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+      SNAPSHOT_PRUNING_ENABLED: ${{ vars.SNAPSHOT_PRUNING_ENABLED || 'false' }}
 
     steps:
       - name: Azure login (OIDC)
@@ -70,6 +69,12 @@ jobs:
                 staging-sp-proto-birk03-pdf
                 staging-sp-proto-birk04-pdf
               )
+              completion_markers=(
+                proto-stage/birkhaeuser-pdf/_SUCCESS/birk01-pdf.json
+                proto-stage/birkhaeuser-pdf/_SUCCESS/birk02-pdf.json
+                proto-stage/birkhaeuser-pdf/_SUCCESS/birk03-pdf.json
+                proto-stage/birkhaeuser-pdf/_SUCCESS/birk04-pdf.json
+              )
               ;;
             *)
               echo "Unsupported phase: $PHASE"
@@ -82,9 +87,35 @@ jobs:
           restart_count=0
           succeeded_count=0
 
+          key="$(az storage account keys list \
+            --resource-group "$RESOURCE_GROUP" \
+            --account-name "$STORAGE_ACCOUNT" \
+            --query '[0].value' \
+            --output tsv)"
+
           echo "Checking latest executions for phase=$PHASE mode=$MODE"
 
-          for job in "${jobs[@]}"; do
+          for index in "${!jobs[@]}"; do
+            job="${jobs[$index]}"
+            completion_marker="${completion_markers[$index]}"
+            marker_exists="$(az storage file exists \
+              --account-name "$STORAGE_ACCOUNT" \
+              --account-key "$key" \
+              --share-name app-data \
+              --path "$completion_marker" \
+              --query exists \
+              --output tsv)"
+
+            if [ "$marker_exists" = "true" ]; then
+              echo "$job status=Succeeded source=completion-marker marker=$completion_marker"
+              succeeded_count=$((succeeded_count + 1))
+              if [ "$MODE" = "all" ]; then
+                printf '%s\n' "$job" >> restart_jobs.txt
+                restart_count=$((restart_count + 1))
+              fi
+              continue
+            fi
+
             latest="$(
               az containerapp job execution list \
                 --resource-group "$RESOURCE_GROUP" \
@@ -265,6 +296,28 @@ jobs:
               --output table
           done
 
+      - name: Resume failed staged extraction shards
+        if: steps.plan.outputs.restart_count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry_run=true; planned restarts:"
+            cat restart_jobs.txt
+            exit 0
+          fi
+
+          while IFS= read -r job; do
+            [ -n "$job" ] || continue
+            echo "Starting $job"
+            az containerapp job start \
+              --name "$job" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query name \
+              --output tsv
+          done < restart_jobs.txt
+
       - name: Prune old staging snapshots
         if: steps.plan.outputs.restart_count != '0'
         shell: bash
@@ -273,6 +326,11 @@ jobs:
 
           if [ "$DRY_RUN" = "true" ]; then
             echo "dry_run=true; skipping snapshot pruning"
+            exit 0
+          fi
+
+          if [ "$SNAPSHOT_PRUNING_ENABLED" != "true" ]; then
+            echo "Snapshot pruning is disabled; set SNAPSHOT_PRUNING_ENABLED=true only after reviewing retained snapshots."
             exit 0
           fi
 
@@ -308,30 +366,7 @@ jobs:
                   --account-name "$STORAGE_ACCOUNT" \
                   --account-key "$key" \
                   --name "$share" \
-                  --snapshot "$snapshot" \
-                  --yes
+                  --snapshot "$snapshot"
               fi
             done
           done
-
-      - name: Resume failed staged extraction shards
-        if: steps.plan.outputs.restart_count != '0'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ "$DRY_RUN" = "true" ]; then
-            echo "dry_run=true; planned restarts:"
-            cat restart_jobs.txt
-            exit 0
-          fi
-
-          while IFS= read -r job; do
-            [ -n "$job" ] || continue
-            echo "Starting $job"
-            az containerapp job start \
-              --name "$job" \
-              --resource-group "$RESOURCE_GROUP" \
-              --query name \
-              --output tsv
-          done < restart_jobs.txt

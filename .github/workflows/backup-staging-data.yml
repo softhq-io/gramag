@@ -19,6 +19,7 @@ jobs:
       FALKORDB_CONTAINER: falkordb
       RETENTION_DAYS: "14"
       MIN_SNAPSHOTS_PER_SHARE: "8"
+      SNAPSHOT_PRUNING_ENABLED: ${{ vars.SNAPSHOT_PRUNING_ENABLED || 'false' }}
 
     steps:
       - name: Azure login (OIDC)
@@ -140,6 +141,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ "$SNAPSHOT_PRUNING_ENABLED" != "true" ]; then
+            echo "Snapshot pruning is disabled; set SNAPSHOT_PRUNING_ENABLED=true only after reviewing retained snapshots."
+            exit 0
+          fi
+
           key="$(az storage account keys list \
             --resource-group "$RESOURCE_GROUP" \
             --account-name "$STORAGE_ACCOUNT" \
@@ -172,8 +178,7 @@ jobs:
                   --account-name "$STORAGE_ACCOUNT" \
                   --account-key "$key" \
                   --name "$share" \
-                  --snapshot "$snapshot" \
-                  --yes
+                  --snapshot "$snapshot"
               fi
             done
           done

@@ -17,6 +17,76 @@ from proto.db_proto import ProtoGraphConnection
 
 
 class ProtoIngestTests(unittest.TestCase):
+    def test_staged_completion_requires_current_successful_checkpoints(self):
+        machine = {
+            "slug": "machine-a",
+            "files": {
+                "pdf": [{"rel": "manual.pdf", "path": "/source/manual.pdf", "size": 10, "mtime": 1}],
+                "text": [],
+                "image": [],
+            },
+        }
+        source = machine["files"]["pdf"][0]
+        fingerprint = ingest._source_fingerprint(source)
+        complete = {
+            "done": {
+                "machine-a": {
+                    "stage::pdf::manual.pdf": {
+                        "sections": 2,
+                        "expected_sections": 2,
+                        "fingerprint": fingerprint,
+                    }
+                }
+            }
+        }
+        failed = {
+            "done": {
+                "machine-a": {
+                    "stage::pdf::manual.pdf": {
+                        "sections": 0,
+                        "fingerprint": fingerprint,
+                        "err": "render failed",
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(ingest.staged_completion_errors([machine], complete, {"pdf"}), [])
+        self.assertEqual(len(ingest.staged_completion_errors([machine], failed, {"pdf"})), 1)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            self.assertGreater(
+                len(ingest.staged_completion_errors([machine], complete, {"pdf"}, output_dir=output_dir)),
+                0,
+            )
+            output = output_dir / "machine-a.jsonl"
+            records = [
+                {
+                    "kind": "pdf",
+                    "record": "document",
+                    "file": {"rel": "manual.pdf"},
+                    "fingerprint": fingerprint,
+                },
+                {
+                    "kind": "pdf",
+                    "record": "manual_section",
+                    "file": {"rel": "manual.pdf"},
+                    "fingerprint": fingerprint,
+                },
+                {
+                    "kind": "pdf",
+                    "record": "manual_section",
+                    "file": {"rel": "manual.pdf"},
+                    "fingerprint": fingerprint,
+                },
+            ]
+            output.write_text("".join(json.dumps(record) + "\n" for record in records))
+            self.assertEqual(
+                ingest.staged_completion_errors([machine], complete, {"pdf"}, output_dir=output_dir),
+                [],
+            )
+
     def test_save_checkpoint_is_atomic(self):
         original = ingest.CHECKPOINT
         with tempfile.TemporaryDirectory() as tmp:

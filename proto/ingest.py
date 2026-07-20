@@ -722,6 +722,78 @@ def stage_machine(m: dict, cp: dict, output_dir: Path, *, deep: bool = False,
                 _save_checkpoint(cp, STAGE_CHECKPOINT)
 
 
+def staged_completion_errors(
+    targets: list[dict],
+    cp: dict,
+    kinds: set[str],
+    *,
+    output_dir: Path | None = None,
+    max_pdfs: int | None = None,
+    max_images: int | None = None,
+) -> list[str]:
+    """Return expected staged inputs lacking a checkpoint or durable JSONL record."""
+    errors = []
+    specs = (
+        ("pdf", "stage::pdf::", max_pdfs),
+        ("text", "stage::txt::", None),
+        ("image", "stage::img::", max_images),
+    )
+    for machine in targets:
+        done = cp.get("done", {}).get(machine["slug"], {})
+        output_index = None
+        if output_dir is not None:
+            output_path = output_dir / f"{machine['slug']}.jsonl"
+            output_index = {}
+            if not output_path.is_file():
+                errors.append(f"{machine['slug']}: missing staged output {output_path}")
+            else:
+                with output_path.open(encoding="utf-8") as staged:
+                    for line_no, line in enumerate(staged, start=1):
+                        try:
+                            record = json.loads(line)
+                            file_record = record.get("file") or {}
+                            key = (
+                                record.get("kind"),
+                                file_record.get("rel"),
+                                record.get("fingerprint"),
+                            )
+                            record_type = record.get("record")
+                            counts = output_index.setdefault(key, {})
+                            counts[record_type] = counts.get(record_type, 0) + 1
+                        except (AttributeError, json.JSONDecodeError) as exc:
+                            errors.append(f"{machine['slug']}: invalid staged JSONL line {line_no}: {exc}")
+        for kind, prefix, limit in specs:
+            if kind not in kinds:
+                continue
+            files = machine["files"][kind]
+            if limit is not None:
+                files = files[:limit]
+            for source in files:
+                key = f"{prefix}{source['rel']}"
+                if not _checkpoint_done(done, key, source):
+                    entry = done.get(key) or {}
+                    reason = entry.get("err") or "missing or stale checkpoint"
+                    errors.append(f"{machine['slug']}:{kind}:{source['rel']}: {reason}")
+                    continue
+                if output_index is None:
+                    continue
+                record_counts = output_index.get((kind, source["rel"], _source_fingerprint(source)), {})
+                if kind == "pdf":
+                    expected_sections = int(done[key].get("expected_sections") or done[key].get("sections") or 0)
+                    records_complete = (
+                        record_counts.get("document", 0) >= 1
+                        and record_counts.get("manual_section", 0) >= expected_sections > 0
+                    )
+                else:
+                    records_complete = record_counts.get("config" if kind == "text" else "image", 0) >= 1
+                if not records_complete:
+                    errors.append(
+                        f"{machine['slug']}:{kind}:{source['rel']}: "
+                        "checkpoint exists but durable staged records are incomplete"
+                    )
+    return errors
+
+
 def _import_done(cp: dict, key: str, fingerprint: str | None = None) -> bool:
     entry = cp["done"].get(key)
     if not entry or entry.get("err"):
@@ -1050,6 +1122,23 @@ def main():
                                max_pdfs=args.max_pdfs, max_images=args.max_images,
                                workers=args.workers, img_workers=args.img_workers,
                                force=args.force, kinds=args.kinds)
+
+    if args.stage_output_dir:
+        incomplete = staged_completion_errors(
+            targets,
+            cp,
+            args.kinds,
+            output_dir=args.stage_output_dir,
+            max_pdfs=args.max_pdfs,
+            max_images=args.max_images,
+        )
+        if incomplete:
+            print("\nStaged extraction is incomplete:")
+            for error in incomplete[:50]:
+                print(f"  ! {error}")
+            if len(incomplete) > 50:
+                print(f"  ! ... and {len(incomplete) - 50} more")
+            raise RuntimeError(f"staged extraction incomplete: {len(incomplete)} item(s)")
 
     print("\nDone.")
     if not args.stage_output_dir:

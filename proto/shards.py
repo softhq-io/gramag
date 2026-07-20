@@ -166,6 +166,7 @@ def render_terraform_shards(
                 "ingest_kinds": "pdf,text",
                 **common,
                 "ingest_stage_output_dir": f"/data/proto-stage/{stage_prefix}-pdf",
+                "completion_marker_path": f"/data/proto-stage/{stage_prefix}-pdf/_SUCCESS/{shard_name}-pdf.json",
                 "sharepoint_extensions": ".pdf,.txt",
             },
         )
@@ -180,6 +181,7 @@ def render_terraform_shards(
                 "ingest_kinds": "image",
                 **common,
                 "ingest_stage_output_dir": f"/data/proto-stage/{stage_prefix}-image",
+                "completion_marker_path": f"/data/proto-stage/{stage_prefix}-image/_SUCCESS/{shard_name}-img.json",
                 "sharepoint_extensions": ".jpg,.jpeg,.png,.bmp,.gif,.tif,.tiff,.pcx",
             },
         )
@@ -204,6 +206,7 @@ def render_terraform_shards(
                 "ingest_kinds": "pdf,text",
                 "ingest_import_output_dir": f"/data/proto-stage/{stage_prefix}-pdf",
                 "ingest_import_checkpoint": f"/data/proto-stage/{stage_prefix}-pdf/import_checkpoint.json",
+                "completion_marker_path": f"/data/proto-stage/{stage_prefix}-pdf/_SUCCESS/{name_prefix}-import-pdf.json",
                 "sharepoint_extensions": ".pdf,.txt",
             },
         )
@@ -218,6 +221,7 @@ def render_terraform_shards(
                 "ingest_kinds": "image",
                 "ingest_import_output_dir": f"/data/proto-stage/{stage_prefix}-image",
                 "ingest_import_checkpoint": f"/data/proto-stage/{stage_prefix}-image/import_checkpoint.json",
+                "completion_marker_path": f"/data/proto-stage/{stage_prefix}-image/_SUCCESS/{name_prefix}-import-img.json",
                 "sharepoint_extensions": ".jpg,.jpeg,.png,.bmp,.gif,.tif,.tiff,.pcx",
             },
         )

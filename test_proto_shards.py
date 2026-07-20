@@ -72,6 +72,14 @@ class ProtoShardPlannerTests(unittest.TestCase):
         self.assertIn('ingest_stage_output_dir = "/data/proto-stage/clients-a-pdf"', tfvars)
         self.assertIn('ingest_stage_output_dir = "/data/proto-stage/clients-a-image"', tfvars)
         self.assertIn('ingest_import_checkpoint = "/data/proto-stage/clients-a-pdf/import_checkpoint.json"', tfvars)
+        self.assertIn(
+            'completion_marker_path = "/data/proto-stage/clients-a-pdf/_SUCCESS/clients-a01-pdf.json"',
+            tfvars,
+        )
+        self.assertIn(
+            'completion_marker_path = "/data/proto-stage/clients-a-image/_SUCCESS/clients-a-import-img.json"',
+            tfvars,
+        )
         self.assertIn('skip_mirror = true', tfvars)
 
         pdf_assignments = tfvars.count('ingest_kinds = "pdf,text"') - 1  # exclude import job

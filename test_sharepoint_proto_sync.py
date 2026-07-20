@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import json
+import subprocess
 import tempfile
 import unittest
 from argparse import Namespace
@@ -267,6 +269,72 @@ class SharePointProtoSyncTests(unittest.TestCase):
             self.assertEqual(command[command.index("--import-output-dir") + 1], "/data/proto-stage/pdf")
             self.assertEqual(command[command.index("--import-checkpoint") + 1], "/data/proto-stage/pdf/import.json")
             self.assertEqual(command[command.index("--import-sleep") + 1], "0.05")
+        finally:
+            sync.run_logged_subprocess = original_run
+
+    def test_run_ingest_writes_atomic_completion_marker_after_success(self):
+        original_run = sync.run_logged_subprocess
+        try:
+            sync.run_logged_subprocess = lambda command, log_path: None
+            with tempfile.TemporaryDirectory() as tmp:
+                marker = Path(tmp) / "_SUCCESS" / "shard.json"
+                manifest = Path(tmp) / "manifest.json"
+                manifest.write_text('{"machines": []}')
+                sync.run_ingest(
+                    Namespace(
+                        apply_schema=False,
+                        ingest_all=True,
+                        ingest_force=False,
+                        ingest_workers=1,
+                        ingest_img_workers=1,
+                        ingest_machine_workers=1,
+                        ingest_kinds="pdf,text",
+                        ingest_stage_output_dir="/data/proto-stage/pdf",
+                        ingest_import_output_dir=None,
+                        ingest_import_checkpoint=None,
+                        ingest_import_sleep=0,
+                        ingest_arg=[],
+                        completion_marker_path=str(marker),
+                        manifest_path=str(manifest),
+                    )
+                )
+
+                payload = json.loads(marker.read_text())
+                self.assertEqual(payload["version"], 1)
+                self.assertEqual(payload["ingest_kinds"], "pdf,text")
+                self.assertEqual(payload["manifest_sha256"], sync.file_sha256(manifest))
+                self.assertEqual(list(marker.parent.glob("*.tmp")), [])
+        finally:
+            sync.run_logged_subprocess = original_run
+
+    def test_run_ingest_does_not_write_completion_marker_after_failure(self):
+        original_run = sync.run_logged_subprocess
+        try:
+            def fail(_command, _log_path):
+                raise subprocess.CalledProcessError(1, ["proto.ingest"])
+
+            sync.run_logged_subprocess = fail
+            with tempfile.TemporaryDirectory() as tmp:
+                marker = Path(tmp) / "_SUCCESS" / "shard.json"
+                with self.assertRaises(subprocess.CalledProcessError):
+                    sync.run_ingest(
+                        Namespace(
+                            apply_schema=False,
+                            ingest_all=True,
+                            ingest_force=False,
+                            ingest_workers=1,
+                            ingest_img_workers=1,
+                            ingest_machine_workers=1,
+                            ingest_kinds="pdf,text",
+                            ingest_stage_output_dir="/data/proto-stage/pdf",
+                            ingest_import_output_dir=None,
+                            ingest_import_checkpoint=None,
+                            ingest_import_sleep=0,
+                            ingest_arg=[],
+                            completion_marker_path=str(marker),
+                        )
+                    )
+                self.assertFalse(marker.exists())
         finally:
             sync.run_logged_subprocess = original_run
 

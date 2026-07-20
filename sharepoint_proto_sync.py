@@ -8,6 +8,7 @@ default; it updates PROTO_ROOT and rebuilds the Proto manifest so
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import posixpath
@@ -15,6 +16,7 @@ import re
 import ssl
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -559,6 +561,67 @@ def run_logged_subprocess(command: list[str], log_path: Path):
         raise subprocess.CalledProcessError(rc, command)
 
 
+def file_sha256(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_completion_marker(args: argparse.Namespace):
+    marker_value = getattr(args, "completion_marker_path", None)
+    if not marker_value:
+        return
+
+    marker_path = Path(marker_value)
+    manifest_path = Path(getattr(args, "manifest_path", PROTO_MANIFEST_PATH))
+    payload = {
+        "version": 1,
+        "completed_at": f"{datetime.utcnow().isoformat()}Z",
+        "job_name": env("CONTAINER_APP_JOB_NAME"),
+        "execution_name": env("CONTAINER_APP_JOB_EXECUTION_NAME") or env("HOSTNAME"),
+        "manifest_path": str(manifest_path),
+        "manifest_sha256": file_sha256(manifest_path),
+        "ingest_kinds": getattr(args, "ingest_kinds", None),
+        "stage_output_dir": getattr(args, "ingest_stage_output_dir", None),
+        "import_output_dir": getattr(args, "ingest_import_output_dir", None),
+    }
+    content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+
+    tmp_name = None
+    try:
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f".{marker_path.name}.",
+            suffix=".tmp",
+            dir=marker_path.parent,
+            text=True,
+        )
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp:
+            tmp.write(content)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+        os.replace(tmp_name, marker_path)
+        tmp_name = None
+        try:
+            dir_fd = os.open(marker_path.parent, os.O_RDONLY)
+        except OSError:
+            dir_fd = None
+        if dir_fd is not None:
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+    finally:
+        if tmp_name and os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+
+    print(f"Wrote completion marker to {marker_path}", flush=True)
+
+
 def run_ingest(args: argparse.Namespace):
     if args.apply_schema:
         from proto.schema import apply_indexes
@@ -585,6 +648,7 @@ def run_ingest(args: argparse.Namespace):
     for value in args.ingest_arg:
         command.append(value)
     run_logged_subprocess(command, ingest_log_path())
+    write_completion_marker(args)
 
 
 def parse_extensions(value: str) -> set[str]:
@@ -633,6 +697,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--ingest-import-output-dir", default=env("PROTO_IMPORT_OUTPUT_DIR"))
     ap.add_argument("--ingest-import-checkpoint", default=env("PROTO_IMPORT_CHECKPOINT"))
     ap.add_argument("--ingest-import-sleep", type=float, default=float(env("PROTO_IMPORT_SLEEP", "0")))
+    ap.add_argument("--completion-marker-path", default=env("PROTO_COMPLETION_MARKER_PATH"))
     ap.add_argument("--ingest-arg", action="append", default=[], help="Additional raw argument for proto.ingest")
     return ap
 

@@ -73,13 +73,22 @@ The automatic resume helper is:
 
 - `.github/workflows/resume-staging-proto-extract.yml`
 
-It currently monitors and resumes Birkhäuser PDF extraction shards. It only
-restarts failed or missing idle shards after:
+The completed Birkhäuser batch is no longer scheduled for automatic resume.
+The workflow remains available as a manual, dry-run-by-default recovery tool.
+It only restarts failed or missing idle shards after:
 
 - confirming no shard is still active,
+- confirming no durable completion marker exists for the shard,
 - running FalkorDB `BGSAVE`,
 - verifying persistence settings,
 - snapshotting `falkordb-data` and `app-data`.
+
+Successful staged extraction jobs write atomic completion markers under
+`/data/proto-stage/<phase>/_SUCCESS/`. These markers are durable on the
+`app-data` Azure File share and take precedence over the limited Container Apps
+execution history. A marker is written only after every expected staged input
+has a current successful checkpoint. Import jobs write their marker only after
+the import subprocess exits successfully.
 
 Backups are handled by:
 
@@ -96,7 +105,9 @@ they verify:
 - last RDB/AOF statuses are OK
 
 Snapshot retention currently keeps 14 days while always preserving at least
-eight snapshots per share.
+eight snapshots per share. Snapshot deletion is disabled unless the repository
+variable `SNAPSHOT_PRUNING_ENABLED` is explicitly set to `true`; review the
+candidate snapshots before enabling it.
 
 ## Safe Phase Sequence
 
