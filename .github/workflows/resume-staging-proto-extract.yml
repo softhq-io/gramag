@@ -1,8 +1,6 @@
 name: Resume Staging Proto Extract
 
 on:
-  schedule:
-    - cron: "35 */2 * * *"
   workflow_dispatch:
     inputs:
       phase:
@@ -23,7 +21,7 @@ on:
       dry_run:
         description: "Plan only; do not snapshot or start jobs"
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:
