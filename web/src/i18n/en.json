@@ -8,7 +8,7 @@
     "login": "Login",
     "logging_in": "Logging in...",
     "logout": "Logout",
-    "username": "Email",
+    "username": "Email or username",
     "email": "Email",
     "password": "Password",
     "loginError": "Invalid credentials",

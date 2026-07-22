@@ -59,9 +59,11 @@ export function LoginPage() {
           </>
         ) : (
           <>
-            <input type="email" placeholder={t('auth.email')} value={email}
+            <input type="text" name="username" autoComplete="username"
+              placeholder={t('auth.username')} value={email}
               onChange={e => setEmail(e.target.value)} autoFocus required />
-            <input type="password" placeholder={t('auth.password')} value={password}
+            <input type="password" name="password" autoComplete="current-password"
+              placeholder={t('auth.password')} value={password}
               onChange={e => setPassword(e.target.value)} required />
           </>
         )}
