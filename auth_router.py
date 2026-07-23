@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
+from math import ceil
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
@@ -26,6 +27,8 @@ from user_service import change_password, now_iso
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 _attempts: dict[str, deque[float]] = defaultdict(deque)
+LOGIN_FAILURE_LIMIT = 5
+LOGIN_COOLDOWN_SECONDS = 15 * 60
 
 
 class LoginRequest(BaseModel):
@@ -64,31 +67,58 @@ def _check_rate_limit(request: Request, identifier: str) -> None:
     key = _rate_limit_key(request, identifier)
     now = time.monotonic()
     attempts = _attempts[key]
-    while attempts and attempts[0] < now - 300:
+    while attempts and attempts[0] <= now - LOGIN_COOLDOWN_SECONDS:
         attempts.popleft()
-    if len(attempts) >= 10:
-        raise HTTPException(status_code=429, detail="Too many login attempts; try again later")
+    if len(attempts) >= LOGIN_FAILURE_LIMIT:
+        retry_after = max(1, ceil(attempts[0] + LOGIN_COOLDOWN_SECONDS - now))
+        _raise_login_cooldown(retry_after)
 
 
-def _record_rate_failure(request: Request, identifier: str) -> None:
-    _attempts[_rate_limit_key(request, identifier)].append(time.monotonic())
+def _record_rate_failure(request: Request, identifier: str) -> int:
+    key = _rate_limit_key(request, identifier)
+    now = time.monotonic()
+    attempts = _attempts[key]
+    while attempts and attempts[0] <= now - LOGIN_COOLDOWN_SECONDS:
+        attempts.popleft()
+    attempts.append(now)
+    if len(attempts) < LOGIN_FAILURE_LIMIT:
+        return 0
+    return max(1, ceil(attempts[0] + LOGIN_COOLDOWN_SECONDS - now))
 
 
-def _is_locked(user: dict) -> bool:
+def _lockout_remaining_seconds(user: dict) -> int:
     value = user.get("locked_until")
     if not value:
-        return False
+        return 0
     try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")) > datetime.now(timezone.utc)
+        remaining = (
+            datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            - datetime.now(timezone.utc)
+        ).total_seconds()
+        return max(0, ceil(remaining))
     except ValueError:
-        return False
+        return 0
 
 
-def _record_failure(user: dict) -> None:
-    failures = int(user.get("failed_login_count") or 0) + 1
+def _raise_login_cooldown(retry_after: int) -> None:
+    retry_after = max(1, int(retry_after))
+    raise HTTPException(
+        status_code=429,
+        detail={"code": "login_cooldown", "retry_after": retry_after},
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
+def _record_failure(user: dict) -> int:
+    previous_lock_expired = bool(user.get("locked_until")) and not _lockout_remaining_seconds(user)
+    failures = 1 if previous_lock_expired else int(user.get("failed_login_count") or 0) + 1
     locked_until = None
-    if failures >= 5:
-        locked_until = datetime.fromtimestamp(time.time() + 15 * 60, timezone.utc).isoformat()
+    retry_after = 0
+    if failures >= LOGIN_FAILURE_LIMIT:
+        retry_after = LOGIN_COOLDOWN_SECONDS
+        locked_until = datetime.fromtimestamp(
+            time.time() + LOGIN_COOLDOWN_SECONDS, timezone.utc
+        ).isoformat()
     db.write(
         """
         MATCH (u:User {id: $id})
@@ -96,6 +126,7 @@ def _record_failure(user: dict) -> None:
         """,
         {"id": user["id"], "failures": failures, "locked_until": locked_until},
     )
+    return retry_after
 
 
 def _normal_login_response(response: Response, user: dict) -> dict:
@@ -115,12 +146,20 @@ def login(req: LoginRequest, request: Request, response: Response):
     identifier = req.email or req.username or ""
     _check_rate_limit(request, identifier)
     user = load_user(identifier, include_credentials=True)
-    if not user or not user.get("active") or _is_locked(user):
-        _record_rate_failure(request, identifier)
+    if not user or not user.get("active"):
+        retry_after = _record_rate_failure(request, identifier)
+        if retry_after:
+            _raise_login_cooldown(retry_after)
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    if not verify_password(req.password, user.get("password_hash") or ""):
+    lockout_remaining = _lockout_remaining_seconds(user)
+    if lockout_remaining:
         _record_rate_failure(request, identifier)
-        _record_failure(user)
+        _raise_login_cooldown(lockout_remaining)
+    if not verify_password(req.password, user.get("password_hash") or ""):
+        rate_retry_after = _record_rate_failure(request, identifier)
+        account_retry_after = _record_failure(user)
+        if rate_retry_after or account_retry_after:
+            _raise_login_cooldown(max(rate_retry_after, account_retry_after))
         raise HTTPException(status_code=401, detail="Invalid credentials")
     db.write(
         """

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from fastapi.routing import APIRoute
+from starlette.requests import Request
 
 import auth
+import auth_router
 import authorization
 import manage_users
 import user_service
@@ -68,6 +71,85 @@ class TokenLifecycleTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as ctx:
                 auth._validated_token_user(token, "access")
         self.assertEqual(ctx.exception.status_code, 401)
+
+
+class LoginCooldownTests(unittest.TestCase):
+    def setUp(self):
+        auth_router._attempts.clear()
+        self.request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/auth/login",
+                "headers": [],
+                "client": ("127.0.0.1", 12345),
+            }
+        )
+
+    def test_locked_account_returns_retry_after(self):
+        locked_until = (
+            datetime.now(timezone.utc) + timedelta(minutes=5)
+        ).isoformat()
+        user = {
+            **principal("all_clients"),
+            "password_hash": "unused",
+            "locked_until": locked_until,
+            "failed_login_count": 5,
+        }
+        with patch.object(auth_router, "load_user", return_value=user):
+            with self.assertRaises(HTTPException) as ctx:
+                auth_router.login(
+                    auth_router.LoginRequest(email="admin", password="correct"),
+                    self.request,
+                    Response(),
+                )
+        self.assertEqual(ctx.exception.status_code, 429)
+        self.assertEqual(ctx.exception.detail["code"], "login_cooldown")
+        self.assertGreater(ctx.exception.detail["retry_after"], 0)
+        self.assertEqual(
+            ctx.exception.headers["Retry-After"],
+            str(ctx.exception.detail["retry_after"]),
+        )
+
+    def test_fifth_failure_starts_cooldown_immediately(self):
+        user = {
+            **principal("all_clients"),
+            "password_hash": "hash",
+            "locked_until": None,
+            "failed_login_count": 4,
+        }
+        with patch.object(auth_router, "load_user", return_value=user), \
+             patch.object(auth_router, "verify_password", return_value=False), \
+             patch.object(auth_router.db, "write") as write:
+            with self.assertRaises(HTTPException) as ctx:
+                auth_router.login(
+                    auth_router.LoginRequest(email="admin", password="wrong"),
+                    self.request,
+                    Response(),
+                )
+        self.assertEqual(ctx.exception.status_code, 429)
+        self.assertEqual(
+            ctx.exception.detail["retry_after"],
+            auth_router.LOGIN_COOLDOWN_SECONDS,
+        )
+        params = write.call_args.args[1]
+        self.assertEqual(params["failures"], auth_router.LOGIN_FAILURE_LIMIT)
+        self.assertIsNotNone(params["locked_until"])
+
+    def test_expired_cooldown_starts_a_fresh_attempt_count(self):
+        user = {
+            **principal("all_clients"),
+            "locked_until": (
+                datetime.now(timezone.utc) - timedelta(seconds=1)
+            ).isoformat(),
+            "failed_login_count": 5,
+        }
+        with patch.object(auth_router.db, "write") as write:
+            retry_after = auth_router._record_failure(user)
+        self.assertEqual(retry_after, 0)
+        params = write.call_args.args[1]
+        self.assertEqual(params["failures"], 1)
+        self.assertIsNone(params["locked_until"])
 
 
 class UserLifecycleTests(unittest.TestCase):

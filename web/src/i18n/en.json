@@ -12,6 +12,7 @@
     "email": "Email",
     "password": "Password",
     "loginError": "Invalid credentials",
+    "loginCooldown": "Too many failed attempts. Try again in {{time}}.",
     "changePasswordRequired": "Choose a new password before continuing.",
     "newPassword": "New password (at least 12 characters)",
     "confirmPassword": "Confirm new password",

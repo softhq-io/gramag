@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../hooks/useAuth'
+import { ApiError } from '../api/client'
 
 export function LoginPage() {
   const { t } = useTranslation()
@@ -14,6 +15,17 @@ export function LoginPage() {
   const [passwordChangeToken, setPasswordChangeToken] = useState<string | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [cooldownSeconds, setCooldownSeconds] = useState(0)
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return
+    const timer = window.setTimeout(() => {
+      setCooldownSeconds(current => Math.max(0, current - 1))
+    }, 1000)
+    return () => window.clearTimeout(timer)
+  }, [cooldownSeconds])
+
+  const cooldownTime = `${Math.floor(cooldownSeconds / 60)}:${String(cooldownSeconds % 60).padStart(2, '0')}`
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -37,7 +49,14 @@ export function LoginPage() {
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('auth.loginError'))
+      if (e instanceof ApiError && e.code === 'login_cooldown') {
+        setCooldownSeconds(e.retryAfter || 15 * 60)
+        setError('')
+      } else if (e instanceof ApiError && e.status === 401) {
+        setError(t('auth.loginError'))
+      } else {
+        setError(e instanceof Error ? e.message : t('auth.loginError'))
+      }
     } finally {
       setLoading(false)
     }
@@ -49,6 +68,9 @@ export function LoginPage() {
         <h1 className="login-title">{t('app.title')}</h1>
         <p className="login-subtitle">{t('app.subtitle')}</p>
         {error && <div className="login-error">{error}</div>}
+        {cooldownSeconds > 0 && (
+          <div className="login-error">{t('auth.loginCooldown', { time: cooldownTime })}</div>
+        )}
         {passwordChangeToken ? (
           <>
             <p className="login-subtitle">{t('auth.changePasswordRequired')}</p>
@@ -61,13 +83,17 @@ export function LoginPage() {
           <>
             <input type="text" name="username" autoComplete="username"
               placeholder={t('auth.username')} value={email}
-              onChange={e => setEmail(e.target.value)} autoFocus required />
+              onChange={e => {
+                setEmail(e.target.value)
+                setCooldownSeconds(0)
+                setError('')
+              }} autoFocus required />
             <input type="password" name="password" autoComplete="current-password"
               placeholder={t('auth.password')} value={password}
               onChange={e => setPassword(e.target.value)} required />
           </>
         )}
-        <button type="submit" disabled={loading}>
+        <button type="submit" disabled={loading || cooldownSeconds > 0}>
           {loading ? (
             <span className="btn-content">
               <span className="btn-spinner" />

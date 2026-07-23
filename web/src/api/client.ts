@@ -1,5 +1,19 @@
 const BASE = '/api'
 
+export class ApiError extends Error {
+  status: number
+  code?: string
+  retryAfter?: number
+
+  constructor(message: string, status: number, code?: string, retryAfter?: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.retryAfter = retryAfter
+  }
+}
+
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('access_token')
   const headers: Record<string, string> = {
@@ -26,7 +40,13 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || `HTTP ${res.status}`)
+    const detail = body.detail
+    const retryAfterHeader = Number.parseInt(res.headers.get('Retry-After') || '', 10)
+    const retryAfter = typeof detail?.retry_after === 'number'
+      ? detail.retry_after
+      : Number.isFinite(retryAfterHeader) ? retryAfterHeader : undefined
+    const message = typeof detail === 'string' ? detail : detail?.message || `HTTP ${res.status}`
+    throw new ApiError(message, res.status, detail?.code, retryAfter)
   }
 
   return res.json()

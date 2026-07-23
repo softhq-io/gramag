@@ -12,6 +12,7 @@
     "email": "E-Mail",
     "password": "Passwort",
     "loginError": "Ungültige Anmeldedaten",
+    "loginCooldown": "Zu viele fehlgeschlagene Versuche. Bitte versuchen Sie es in {{time}} erneut.",
     "changePasswordRequired": "Bitte wählen Sie ein neues Passwort, bevor Sie fortfahren.",
     "newPassword": "Neues Passwort (mindestens 12 Zeichen)",
     "confirmPassword": "Neues Passwort bestätigen",
