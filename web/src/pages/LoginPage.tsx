@@ -25,7 +25,7 @@ export function LoginPage() {
     return () => window.clearTimeout(timer)
   }, [cooldownSeconds])
 
-  const cooldownTime = `${Math.floor(cooldownSeconds / 60)}:${String(cooldownSeconds % 60).padStart(2, '0')}`
+  const cooldownMinutes = Math.max(1, Math.ceil(cooldownSeconds / 60))
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -69,7 +69,9 @@ export function LoginPage() {
         <p className="login-subtitle">{t('app.subtitle')}</p>
         {error && <div className="login-error">{error}</div>}
         {cooldownSeconds > 0 && (
-          <div className="login-error">{t('auth.loginCooldown', { time: cooldownTime })}</div>
+          <div className="login-error">
+            {t('auth.loginCooldown', { count: cooldownMinutes })}
+          </div>
         )}
         {passwordChangeToken ? (
           <>
