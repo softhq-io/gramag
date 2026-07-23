@@ -3,7 +3,9 @@ import type { UserRole } from './auth'
 
 export interface AdminUser {
   id: string
-  email: string
+  email: string | null
+  username: string | null
+  identifier: string
   name: string
   role: UserRole
   active: boolean
@@ -31,7 +33,8 @@ export const listUsers = () => get<AdminUser[]>('/admin/users')
 export const listClients = () => get<AdminClient[]>('/admin/clients')
 
 export const createUser = (body: {
-  email: string
+  email?: string
+  username?: string
   name: string
   role: UserRole
   client_ids: string[]

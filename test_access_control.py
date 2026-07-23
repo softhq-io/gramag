@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException, Response
@@ -31,6 +32,8 @@ def principal(role: str = "user", clients: list[str] | None = None) -> dict:
     return {
         "id": "user_a",
         "email": "a@example.com",
+        "username": None,
+        "identifier": "a@example.com",
         "name": "A",
         "role": role,
         "active": True,
@@ -157,6 +160,47 @@ class UserLifecycleTests(unittest.TestCase):
         password = user_service.generate_temporary_password()
         self.assertGreaterEqual(len(password), 20)
 
+    def test_username_is_normalized_and_validated(self):
+        self.assertEqual(user_service.validate_username(" Field.Tech "), "field.tech")
+        for invalid in ("ab", "bad name", "name@example.com", "_starts-wrong"):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(HTTPException) as ctx:
+                    user_service.validate_username(invalid)
+                self.assertEqual(ctx.exception.status_code, 422)
+
+    def test_user_can_be_created_with_username_instead_of_email(self):
+        created_user = {
+            **principal("all_clients"),
+            "id": "user_fixed",
+            "email": None,
+            "username": "field.tech",
+            "identifier": "field.tech",
+            "name": "Field Tech",
+            "client_ids": [],
+        }
+        with patch.object(user_service.db, "query"), \
+             patch.object(user_service.db, "write") as write, \
+             patch.object(user_service, "result_single", side_effect=[
+                 None, {"id": "user_fixed"},
+             ]), \
+             patch.object(user_service.uuid, "uuid4", return_value=SimpleNamespace(hex="fixed")), \
+             patch.object(user_service, "generate_temporary_password", return_value="temporary-password"), \
+             patch.object(user_service, "hash_password", return_value="password-hash"), \
+             patch.object(user_service, "load_user", return_value=created_user):
+            user, password = user_service.create_user(
+                username="Field.Tech",
+                name="Field Tech",
+                role="all_clients",
+                client_ids=[],
+                actor_id="admin",
+            )
+        create_params = write.call_args_list[0].args[1]
+        self.assertEqual(create_params["identifier"], "field.tech")
+        self.assertEqual(create_params["username"], "field.tech")
+        self.assertIsNone(create_params["email"])
+        self.assertEqual(user["identifier"], "field.tech")
+        self.assertEqual(password, "temporary-password")
+
     def test_last_superadmin_cannot_be_deactivated(self):
         current = principal("superadmin")
         with patch.object(user_service, "load_user", return_value=current), \
@@ -179,12 +223,19 @@ class UserLifecycleTests(unittest.TestCase):
 
     def test_user_listing_sorts_after_aggregated_query(self):
         columns = [
-            "id", "email", "name", "role", "active", "must_change_password",
+            "id", "email", "username", "identifier", "name", "role",
+            "active", "must_change_password",
             "created_at", "updated_at", "last_login_at", "client_ids",
         ]
         result = QueryResult(columns, [
-            ["u2", "z@example.com", "Zulu", "user", True, False, None, None, None, [None]],
-            ["u1", "a@example.com", "alpha", "all_clients", True, False, None, None, None, []],
+            [
+                "u2", "z@example.com", None, "z@example.com", "Zulu",
+                "user", True, False, None, None, None, [None],
+            ],
+            [
+                "u1", None, "alpha", "alpha", "alpha", "all_clients",
+                True, False, None, None, None, [],
+            ],
         ])
         captured = {}
 

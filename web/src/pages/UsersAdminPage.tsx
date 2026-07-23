@@ -17,7 +17,7 @@ export function UsersAdminPage() {
   const [clients, setClients] = useState<AdminClient[]>([])
   const [error, setError] = useState('')
   const [temporaryPassword, setTemporaryPassword] = useState('')
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [name, setName] = useState('')
   const [role, setRole] = useState<UserRole>('user')
   const [clientIds, setClientIds] = useState<string[]>([])
@@ -44,13 +44,15 @@ export function UsersAdminPage() {
     setError('')
     try {
       const result = await createUser({
-        email,
+        ...(identifier.includes('@')
+          ? { email: identifier.trim() }
+          : { username: identifier.trim() }),
         name,
         role,
         client_ids: role === 'user' ? clientIds : [],
       })
       setTemporaryPassword(result.temporary_password)
-      setEmail('')
+      setIdentifier('')
       setName('')
       setRole('user')
       setClientIds([])
@@ -78,7 +80,7 @@ export function UsersAdminPage() {
   }
 
   async function reset(user: AdminUser) {
-    if (!window.confirm(`Reset password for ${user.email}?`)) return
+    if (!window.confirm(`Reset password for ${user.identifier}?`)) return
     try {
       const result = await resetUserPassword(user.id)
       setTemporaryPassword(result.temporary_password)
@@ -113,7 +115,8 @@ export function UsersAdminPage() {
 
       <form className="admin-user-create" onSubmit={submit}>
         <h2>Add user</h2>
-        <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
+        <input type="text" autoComplete="off" placeholder="Email or username"
+          value={identifier} onChange={e => setIdentifier(e.target.value)} required />
         <input placeholder="Display name" value={name} onChange={e => setName(e.target.value)} required />
         <select value={role} onChange={e => setRole(e.target.value as UserRole)}>
           {ROLES.map(value => <option key={value} value={value}>{roleLabel(value)}</option>)}
@@ -130,7 +133,7 @@ export function UsersAdminPage() {
           <div className={`admin-user-row ${user.active ? '' : 'inactive'}`} key={user.id}>
             <div className="admin-user-identity">
               <input value={user.name} onChange={e => edit(user.id, { name: e.target.value })} />
-              <span>{user.email}</span>
+              <span>{user.identifier}</span>
               {user.must_change_password && <small>Password change required</small>}
             </div>
             <select value={user.role} onChange={e => edit(user.id, { role: e.target.value as UserRole })}>

@@ -15,6 +15,7 @@ from db import db
 from db_helpers import result_single, result_to_dicts, result_value
 
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
 MIN_PASSWORD_LENGTH = 12
 
 
@@ -27,6 +28,34 @@ def validate_email(email: str) -> str:
     if not EMAIL_RE.fullmatch(normalized):
         raise HTTPException(status_code=422, detail="A valid email address is required")
     return normalized
+
+
+def validate_username(username: str) -> str:
+    normalized = username.strip().lower()
+    if not USERNAME_RE.fullmatch(normalized):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Username must contain 3–64 letters, numbers, dots, "
+                "underscores, or hyphens"
+            ),
+        )
+    return normalized
+
+
+def validate_identity(email: str | None, username: str | None) -> tuple[str | None, str | None, str]:
+    email_value = (email or "").strip()
+    username_value = (username or "").strip()
+    if bool(email_value) == bool(username_value):
+        raise HTTPException(
+            status_code=422,
+            detail="Provide exactly one email address or username",
+        )
+    if email_value:
+        normalized_email = validate_email(email_value)
+        return normalized_email, None, normalized_email
+    normalized_username = validate_username(username_value)
+    return None, normalized_username, normalized_username
 
 
 def validate_password(password: str) -> None:
@@ -103,7 +132,8 @@ def list_users() -> list[dict]:
             """
             MATCH (u:User)
             OPTIONAL MATCH (u)-[:CAN_ACCESS]->(c:Customer)
-            RETURN u.id AS id, coalesce(u.email, u.username) AS email,
+            RETURN u.id AS id, u.email AS email, u.username AS username,
+                   coalesce(u.username, u.email) AS identifier,
                    coalesce(u.name, u.username) AS name, u.role AS role,
                    coalesce(u.active, true) AS active,
                    coalesce(u.must_change_password, false) AS must_change_password,
@@ -115,7 +145,11 @@ def list_users() -> list[dict]:
     )
     for row in rows:
         row["client_ids"] = [client_id for client_id in (row.get("client_ids") or []) if client_id]
-    rows.sort(key=lambda row: str(row.get("name") or row.get("email") or "").casefold())
+    rows.sort(
+        key=lambda row: str(
+            row.get("name") or row.get("identifier") or ""
+        ).casefold()
+    )
     return rows
 
 
@@ -133,24 +167,45 @@ def list_clients() -> list[dict]:
 
 
 def create_user(
-    *, email: str, name: str, role: str, client_ids: list[str], actor_id: str
+    *,
+    name: str,
+    role: str,
+    client_ids: list[str],
+    actor_id: str,
+    email: str | None = None,
+    username: str | None = None,
 ) -> tuple[dict, str]:
-    normalized = validate_email(email)
+    normalized_email, normalized_username, identifier = validate_identity(email, username)
     if role not in VALID_ROLES:
         raise HTTPException(status_code=422, detail="Invalid role")
     existing = result_single(
-        db.query("MATCH (u:User {email_normalized: $email}) RETURN u.id AS id", {"email": normalized})
+        db.query(
+            """
+            MATCH (u:User)
+            WHERE u.login_normalized = $identifier
+               OR u.email_normalized = $identifier
+               OR u.username_normalized = $identifier
+               OR toLower(u.username) = $identifier
+            RETURN u.id AS id
+            """,
+            {"identifier": identifier},
+        )
     )
     if existing:
-        raise HTTPException(status_code=409, detail="A user with this email already exists")
+        raise HTTPException(
+            status_code=409,
+            detail="A user with this email or username already exists",
+        )
     grants = _validate_clients(client_ids) if role == "user" else []
     temporary_password = generate_temporary_password()
     user_id = f"user_{uuid.uuid4().hex}"
     now = now_iso()
     created = result_single(db.write(
         """
-        MERGE (u:User {email_normalized: $email})
-        ON CREATE SET u.id = $id, u.email = $email, u.name = $name,
+        MERGE (u:User {login_normalized: $identifier})
+        ON CREATE SET u.id = $id, u.email = $email,
+                      u.email_normalized = $email, u.username = $username,
+                      u.username_normalized = $username, u.name = $name,
                       u.role = $role, u.password_hash = $password_hash,
                       u.active = true, u.must_change_password = true,
                       u.auth_version = 1, u.failed_login_count = 0,
@@ -159,17 +214,32 @@ def create_user(
         """,
         {
             "id": user_id,
-            "email": normalized,
-            "name": name.strip() or normalized,
+            "identifier": identifier,
+            "email": normalized_email,
+            "username": normalized_username,
+            "name": name.strip() or identifier,
             "role": role,
             "password_hash": hash_password(temporary_password),
             "now": now,
         },
     ))
     if not created or created.get("id") != user_id:
-        raise HTTPException(status_code=409, detail="A user with this email already exists")
+        raise HTTPException(
+            status_code=409,
+            detail="A user with this email or username already exists",
+        )
     _replace_assignments(user_id, role, grants)
-    _audit(actor_id, user_id, "user_created", {"email": normalized, "role": role, "client_ids": grants})
+    _audit(
+        actor_id,
+        user_id,
+        "user_created",
+        {
+            "identifier": identifier,
+            "identity_type": "email" if normalized_email else "username",
+            "role": role,
+            "client_ids": grants,
+        },
+    )
     return serialize_user(load_user(user_id) or {}), temporary_password
 
 
@@ -203,7 +273,9 @@ def update_user(user_id: str, changes: dict, *, actor_id: str) -> dict:
             raise HTTPException(status_code=409, detail="The last active superadmin cannot be changed")
     client_ids = changes.get("client_ids", current.get("client_ids") or [])
     grants = _validate_clients(client_ids) if role == "user" else []
-    name = str(changes.get("name", current.get("name") or current["email"])).strip()
+    name = str(
+        changes.get("name", current.get("name") or current["identifier"])
+    ).strip()
     db.write(
         """
         MATCH (u:User {id: $id})

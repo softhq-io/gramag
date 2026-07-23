@@ -4,7 +4,9 @@ export type UserRole = 'superadmin' | 'all_clients' | 'user'
 
 export interface User {
   id: string
-  email: string
+  email: string | null
+  username: string | null
+  identifier: string
   role: UserRole
   name: string
   active: boolean

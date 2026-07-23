@@ -10,7 +10,8 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 class UserCreateRequest(BaseModel):
-    email: str
+    email: str | None = None
+    username: str | None = None
     name: str
     role: str
     client_ids: list[str] = Field(default_factory=list)
@@ -32,6 +33,7 @@ def users(_admin: dict = Depends(require_superadmin)):
 def add_user(req: UserCreateRequest, admin: dict = Depends(require_superadmin)):
     user, temporary_password = create_user(
         email=req.email,
+        username=req.username,
         name=req.name,
         role=req.role,
         client_ids=req.client_ids,
@@ -58,4 +60,3 @@ def admin_reset_password(user_id: str, admin: dict = Depends(require_superadmin)
 @router.get("/clients")
 def clients(_admin: dict = Depends(require_superadmin)):
     return list_clients()
-

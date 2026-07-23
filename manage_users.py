@@ -34,6 +34,7 @@ def _set_superadmin(email: str, name: str, *, require_empty: bool) -> str:
             """
             MATCH (u:User {id: $id})
             SET u.email = $email, u.email_normalized = $email, u.name = $name,
+                u.login_normalized = $email,
                 u.role = 'superadmin', u.active = true,
                 u.password_hash = $hash, u.must_change_password = true,
                 u.failed_login_count = 0, u.locked_until = NULL,
@@ -48,7 +49,8 @@ def _set_superadmin(email: str, name: str, *, require_empty: bool) -> str:
         db.write(
             """
             CREATE (:User {
-              id: $id, email: $email, email_normalized: $email, name: $name,
+              id: $id, email: $email, email_normalized: $email,
+              login_normalized: $email, name: $name,
               role: 'superadmin', active: true, password_hash: $hash,
               must_change_password: true, auth_version: 1, failed_login_count: 0,
               created_at: $now, updated_at: $now
@@ -174,6 +176,8 @@ def _migrate_legacy(*, dry_run: bool, email_mappings: dict[str, str]) -> None:
                 MATCH (u:User)
                 WHERE u.username = item.username
                 SET u.id = item.id, u.email = item.email, u.email_normalized = item.email,
+                    u.username_normalized = toLower(u.username),
+                    u.login_normalized = toLower(u.username),
                     u.role = 'all_clients', u.active = true,
                     u.must_change_password = false,
                     u.failed_login_count = coalesce(u.failed_login_count, 0),

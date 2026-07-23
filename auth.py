@@ -33,7 +33,9 @@ def verify_password(password: str, password_hash: str) -> bool:
 def _token(user: dict, token_type: str, expires: datetime.timedelta) -> str:
     payload = {
         "sub": user["id"],
-        "email": user["email"],
+        "email": user.get("email"),
+        "username": user.get("username"),
+        "identifier": user["identifier"],
         "role": user["role"],
         "ver": int(user.get("auth_version") or 0),
         "type": token_type,
@@ -75,13 +77,17 @@ def load_user(identifier: str, *, include_credentials: bool = False) -> dict | N
             f"""
             MATCH (u:User)
             WHERE u.id = $identifier
+               OR u.login_normalized = $normalized
                OR u.email_normalized = $normalized
-               OR u.username = $identifier
+               OR u.username_normalized = $normalized
+               OR toLower(u.username) = $normalized
             OPTIONAL MATCH (u)-[:CAN_ACCESS]->(c:Customer)
             RETURN u.id AS id,
-                   coalesce(u.email, u.username) AS email,
+                   u.email AS email,
+                   u.username AS username,
+                   coalesce(u.username, u.email) AS identifier,
                    coalesce(u.email_normalized, toLower(u.username)) AS email_normalized,
-                   coalesce(u.name, u.username) AS name,
+                   coalesce(u.name, u.username, u.email) AS name,
                    u.role AS role,
                    coalesce(u.active, true) AS active,
                    coalesce(u.must_change_password, false) AS must_change_password,
@@ -104,8 +110,10 @@ def load_user(identifier: str, *, include_credentials: bool = False) -> dict | N
 def public_user(user: dict) -> dict:
     return {
         "id": user["id"],
-        "email": user["email"],
-        "name": user.get("name") or user["email"],
+        "email": user.get("email"),
+        "username": user.get("username"),
+        "identifier": user["identifier"],
+        "name": user.get("name") or user["identifier"],
         "role": user["role"],
         "active": bool(user.get("active", True)),
         "must_change_password": bool(user.get("must_change_password", False)),

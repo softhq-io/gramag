@@ -41,6 +41,8 @@ def apply_indexes():
         ("TroubleshootingEntry", "symptom"),
         ("Session", "id"),
         ("User", "username"),
+        ("User", "username_normalized"),
+        ("User", "login_normalized"),
         ("User", "id"),
         ("User", "email_normalized"),
         ("UserAuditEvent", "id"),
