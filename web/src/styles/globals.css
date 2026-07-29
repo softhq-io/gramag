@@ -2953,14 +2953,40 @@ body {
   max-height: min(360px, 48vh);
   padding: 5px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #42556a transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--proto-border);
   border-radius: 11px;
   background: #0d151f;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.52);
 }
 
+.proto-machine-menu.above {
+  top: auto;
+  bottom: calc(100% + 7px);
+}
+
+.proto-machine-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.proto-machine-menu::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #42556a;
+  background-clip: padding-box;
+}
+
 .proto-machine-menu-count {
+  position: sticky;
+  z-index: 2;
+  top: -5px;
   padding: 6px 9px 8px;
+  background: #0d151f;
   color: #647487;
   font-size: 9px;
   font-weight: 700;

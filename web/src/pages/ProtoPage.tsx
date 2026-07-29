@@ -13,11 +13,13 @@ import type {
   ProtoChatSession,
   ProtoHit,
 } from '../api/proto'
+import { useAuth } from '../hooks/useAuth'
 
 type ProtoSectionDetail = Awaited<ReturnType<typeof getProtoSection>>
 type Machine = CustomerOverview['machines'][number]
 
 export function ProtoPage() {
+  const { user } = useAuth()
   const [overview, setOverview] = useState<CustomerOverview | null>(null)
   const [customer, setCustomer] = useState('')
   const [machineSlug, setMachineSlug] = useState('')
@@ -51,12 +53,14 @@ export function ProtoPage() {
     return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'de-CH'))
   }, [overview])
 
+  const canChooseClient = user?.role === 'superadmin' || user?.role === 'all_clients'
+
   useEffect(() => {
-    if (customerOptions.length === 1 && customer !== customerOptions[0]) {
+    if (!canChooseClient && customerOptions.length === 1 && customer !== customerOptions[0]) {
       setCustomer(customerOptions[0])
       setMachineSlug('')
     }
-  }, [customer, customerOptions])
+  }, [canChooseClient, customer, customerOptions])
 
   const availableMachines = useMemo(() => {
     if (!overview || !customer) return []
@@ -213,6 +217,7 @@ export function ProtoPage() {
           machineSlug={machineSlug}
           machines={availableMachines}
           selectedMachine={selectedMachine}
+          forceCustomerSelect={canChooseClient}
           onCustomerChange={changeCustomer}
           onMachineChange={setMachineSlug}
           onContinue={enterWorkspace}
@@ -258,6 +263,7 @@ function SelectionView({
   machineSlug,
   machines,
   selectedMachine,
+  forceCustomerSelect,
   onCustomerChange,
   onMachineChange,
   onContinue,
@@ -267,11 +273,12 @@ function SelectionView({
   machineSlug: string
   machines: Machine[]
   selectedMachine: Machine | null
+  forceCustomerSelect: boolean
   onCustomerChange: (value: string) => void
   onMachineChange: (value: string) => void
   onContinue: () => void
 }) {
-  const hasSingleCustomer = customerOptions.length === 1
+  const hasSingleCustomer = customerOptions.length === 1 && !forceCustomerSelect
 
   return (
     <main className="proto-select-page">
@@ -393,6 +400,9 @@ function SearchableMachineSelect({
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [menuPlacement, setMenuPlacement] = useState<'above' | 'below'>('below')
+  const [menuMaxHeight, setMenuMaxHeight] = useState(300)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const selectedMachine = machines.find((machine) => machine.slug === value) || null
   const visibleMachines = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase('de-CH')
@@ -414,6 +424,31 @@ function SearchableMachineSelect({
       .slice(0, 100)
   }, [machines, search])
 
+  useEffect(() => {
+    if (!open) return
+
+    function updateMenuLayout() {
+      const input = inputRef.current
+      if (!input) return
+      const rect = input.getBoundingClientRect()
+      const viewportHeight = window.visualViewport?.height || window.innerHeight
+      const spaceBelow = viewportHeight - rect.bottom - 14
+      const spaceAbove = rect.top - 14
+      const placement = spaceBelow < 220 && spaceAbove > spaceBelow ? 'above' : 'below'
+      const availableSpace = placement === 'above' ? spaceAbove : spaceBelow
+      setMenuPlacement(placement)
+      setMenuMaxHeight(Math.max(150, Math.min(360, Math.floor(availableSpace))))
+    }
+
+    updateMenuLayout()
+    window.addEventListener('resize', updateMenuLayout)
+    window.visualViewport?.addEventListener('resize', updateMenuLayout)
+    return () => {
+      window.removeEventListener('resize', updateMenuLayout)
+      window.visualViewport?.removeEventListener('resize', updateMenuLayout)
+    }
+  }, [open])
+
   function pick(machine: Machine) {
     onChange(machine.slug)
     setSearch('')
@@ -424,6 +459,7 @@ function SearchableMachineSelect({
     <div className={`proto-machine-picker ${open ? 'open' : ''} ${disabled ? 'disabled' : ''}`}>
       <MachineIcon />
       <input
+        ref={inputRef}
         id={id}
         role="combobox"
         aria-expanded={open}
@@ -456,9 +492,10 @@ function SearchableMachineSelect({
       <SearchIcon />
       {open && (
         <div
-          className="proto-machine-menu"
+          className={`proto-machine-menu ${menuPlacement}`}
           id={`${id}-options`}
           role="listbox"
+          style={{ maxHeight: `${menuMaxHeight}px` }}
           onMouseDown={(event) => event.preventDefault()}
         >
           <div className="proto-machine-menu-count">
