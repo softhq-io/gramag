@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createProtoChat,
   getCustomerOverview,
@@ -14,13 +14,14 @@ import type {
   ProtoHit,
 } from '../api/proto'
 
-type Mode = 'site' | 'machine' | 'ask'
 type ProtoSectionDetail = Awaited<ReturnType<typeof getProtoSection>>
+type Machine = CustomerOverview['machines'][number]
 
 export function ProtoPage() {
   const [overview, setOverview] = useState<CustomerOverview | null>(null)
-  const [mode, setMode] = useState<Mode>('site')
-  const [selected, setSelected] = useState<string | null>(null) // machine slug
+  const [customer, setCustomer] = useState('')
+  const [machineSlug, setMachineSlug] = useState('')
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [askedQuery, setAskedQuery] = useState('')
   const [loading, setLoading] = useState(false)
@@ -28,131 +29,136 @@ export function ProtoPage() {
   const [activeChat, setActiveChat] = useState<ProtoChatSession | null>(null)
   const [chatMessages, setChatMessages] = useState<ProtoChatMessage[]>([])
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
-  const [deep, setDeep] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [sectionDetail, setSectionDetail] = useState<ProtoSectionDetail | null>(null)
   const [activeCite, setActiveCite] = useState<number | null>(null)
-  const [kunde, setKunde] = useState<string>('Alle')
-  const [hersteller, setHersteller] = useState<string>('Alle')
-  const [sonstigesOpen, setSonstigesOpen] = useState(false)
+  const [loadError, setLoadError] = useState(false)
 
   useEffect(() => {
-    getCustomerOverview().then(setOverview).catch(console.error)
+    getCustomerOverview()
+      .then(setOverview)
+      .catch(() => setLoadError(true))
   }, [])
 
-  const selMachine = overview?.machines.find((m) => m.slug === selected) || null
-
-  const { primary, sonstiges, herstellerOptions, kundenOptions } = useMemo(() => {
-    if (!overview) {
-      return { primary: [], sonstiges: [], herstellerOptions: [], kundenOptions: [] }
-    }
-    const kundenOptions = [
-      'Alle',
-      ...Array.from(new Set(overview.machines.map((m) => m.customer).filter(Boolean) as string[]))
-        .sort((a, b) => a.localeCompare(b, 'de-CH')),
-    ]
-    const byCustomer = kunde === 'Alle'
-      ? overview.machines
-      : overview.machines.filter((m) => m.customer === kunde)
-    const herstellerOptions = ['Alle', ...new Set(byCustomer.map((m) => m.hersteller))]
-    const filtered = hersteller === 'Alle'
-      ? byCustomer
-      : byCustomer.filter((m) => m.hersteller === hersteller)
-    const primary = filtered.filter(
-      (m) => (m.docs ?? 0) > 0 || (m.imgs ?? 0) > 0 || (m.txts ?? 0) > 0,
-    )
-    const sonstiges = filtered.filter(
-      (m) => (m.docs ?? 0) === 0 && (m.imgs ?? 0) === 0 && (m.txts ?? 0) === 0,
-    )
-    primary.sort((a, b) => (b.sections ?? 0) - (a.sections ?? 0))
-    return { primary, sonstiges, herstellerOptions, kundenOptions }
-  }, [overview, kunde, hersteller])
+  const customerOptions = useMemo(() => {
+    if (!overview) return []
+    const machineCustomers = overview.machines
+      .map((machine) => machine.customer)
+      .filter((value): value is string => Boolean(value))
+    const names = machineCustomers.length > 0
+      ? machineCustomers
+      : [overview.customer.name]
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'de-CH'))
+  }, [overview])
 
   useEffect(() => {
-    if (hersteller === 'Alle' || herstellerOptions.includes(hersteller)) return
-    setHersteller('Alle')
-  }, [hersteller, herstellerOptions])
+    if (customerOptions.length === 1 && customer !== customerOptions[0]) {
+      setCustomer(customerOptions[0])
+      setMachineSlug('')
+    }
+  }, [customer, customerOptions])
 
-  function pickMachine(slug: string) {
-    setSelected(slug)
-    setMode('machine')
+  const availableMachines = useMemo(() => {
+    if (!overview || !customer) return []
+    const hasCustomerMetadata = overview.machines.some((machine) => Boolean(machine.customer))
+    const result = hasCustomerMetadata
+      ? overview.machines.filter((machine) => machine.customer === customer)
+      : overview.machines
+    return [...result].sort((a, b) =>
+      (a.model || a.folder).localeCompare(b.model || b.folder, 'de-CH'),
+    )
+  }, [customer, overview])
+
+  const selectedMachine = overview?.machines.find((machine) => machine.slug === machineSlug) || null
+
+  function changeCustomer(value: string) {
+    setCustomer(value)
+    setMachineSlug('')
+  }
+
+  async function enterWorkspace() {
+    if (!machineSlug) return
+    setWorkspaceOpen(true)
     setActiveChat(null)
     setChatMessages([])
     setSelectedAssistantId(null)
     setSectionDetail(null)
-    listProtoChats({ machine_slug: slug })
-      .then((sessions) => {
-        setChatSessions(sessions)
-      })
-      .catch(console.error)
+    setActiveCite(null)
+    try {
+      setChatSessions(await listProtoChats({ machine_slug: machineSlug }))
+    } catch {
+      setChatSessions([])
+    }
   }
 
-  function backToSite() {
-    setSelected(null)
-    setMode('site')
+  function leaveWorkspace() {
+    setWorkspaceOpen(false)
     setActiveChat(null)
     setChatMessages([])
     setChatSessions([])
     setSelectedAssistantId(null)
     setSectionDetail(null)
+    setActiveCite(null)
+    setQuery('')
   }
 
-  async function runQuery(q?: string) {
-    const text = (q ?? query).trim()
-    if (!text) return
-    const startingMode = mode
+  function newChat() {
+    setActiveChat(null)
+    setChatMessages([])
+    setSelectedAssistantId(null)
+    setSectionDetail(null)
+    setActiveCite(null)
+    setQuery('')
+  }
+
+  async function runQuery(suggestedQuery?: string) {
+    const text = (suggestedQuery ?? query).trim()
+    if (!text || !selectedMachine || loading) return
     setQuery('')
     setAskedQuery(text)
     setLoading(true)
     setSectionDetail(null)
     setActiveCite(null)
-    setMode('ask')
+
     try {
-      const customer = selected
-        ? selMachine?.customer ?? null
-        : kunde === 'Alle' ? null : kunde
       let session = activeChat
       let createdNewSession = false
-      const forceNewSession = startingMode !== 'ask'
-      if (
-        forceNewSession ||
-        !session ||
-        (session.machine_slug ?? null) !== selected ||
-        (session.customer ?? null) !== customer
-      ) {
+      if (!session || session.machine_slug !== selectedMachine.slug) {
         session = await createProtoChat({
-          machine_slug: selected,
-          customer,
+          machine_slug: selectedMachine.slug,
+          customer: selectedMachine.customer || customer,
           title: text,
         })
         createdNewSession = true
         setActiveChat(session)
         setChatMessages([])
-        setChatSessions((prev) => [session!, ...prev.filter((s) => s.id !== session!.id)])
+        setChatSessions((previous) => [
+          session!,
+          ...previous.filter((item) => item.id !== session!.id),
+        ])
       }
-      const r = await sendProtoChatMessage(session.id, {
-        text,
-        deep,
-      })
-      setActiveChat(r.session)
-      setChatMessages((prev) => [
-        ...(createdNewSession ? [] : prev),
-        r.user_message,
-        r.assistant_message,
+
+      const response = await sendProtoChatMessage(session.id, { text })
+      setActiveChat(response.session)
+      setChatMessages((previous) => [
+        ...(createdNewSession ? [] : previous),
+        response.user_message,
+        response.assistant_message,
       ])
-      setSelectedAssistantId(r.assistant_message.id)
-      setChatSessions((prev) => [r.session, ...prev.filter((s) => s.id !== r.session.id)])
-      setQuery('')
-    } catch (e) {
-      console.error(e)
+      setSelectedAssistantId(response.assistant_message.id)
+      setChatSessions((previous) => [
+        response.session,
+        ...previous.filter((item) => item.id !== response.session.id),
+      ])
+    } catch (error) {
+      console.error(error)
+      setQuery(text)
     } finally {
       setLoading(false)
     }
   }
 
   async function openChat(session: ProtoChatSession) {
-    setActiveChat(session)
-    setMode('ask')
     setLoading(true)
     setSectionDetail(null)
     setActiveCite(null)
@@ -160,95 +166,64 @@ export function ProtoPage() {
       const detail = await getProtoChat(session.id)
       setActiveChat(detail.session)
       setChatMessages(detail.messages)
-      const latestAssistant = [...detail.messages]
-        .reverse()
-        .find((m) => m.role === 'assistant')
+      const latestAssistant = [...detail.messages].reverse().find((message) => message.role === 'assistant')
       setSelectedAssistantId(latestAssistant?.id ?? null)
-    } catch (e) {
-      console.error(e)
+    } catch (error) {
+      console.error(error)
     } finally {
       setLoading(false)
     }
   }
 
-  async function showSection(sectionId: string | undefined, idx: number) {
+  async function showSection(sectionId: string | undefined, index: number) {
     if (!sectionId) return
-    setActiveCite(idx)
+    setActiveCite(index)
     try {
-      const s = await getProtoSection(sectionId)
-      setSectionDetail(s)
-    } catch (e) {
-      console.error(e)
+      setSectionDetail(await getProtoSection(sectionId))
+    } catch (error) {
+      console.error(error)
     }
   }
 
-  if (!overview) return <div className="proto2-loading">Lade Wissensdatenbank …</div>
+  if (loadError) {
+    return (
+      <div className="proto-state-page">
+        <div className="proto-state-icon">!</div>
+        <h1>Wissensdatenbank nicht erreichbar</h1>
+        <p>Bitte laden Sie die Seite erneut oder versuchen Sie es später noch einmal.</p>
+      </div>
+    )
+  }
+
+  if (!overview) {
+    return (
+      <div className="proto-state-page">
+        <div className="proto-loader" />
+        <p>Wissensdatenbank wird vorbereitet …</p>
+      </div>
+    )
+  }
 
   return (
-    <div className="proto2">
-      <div className="proto2-breadcrumb">
-        <a onClick={backToSite}>Kunden</a>
-        <span className="sep">›</span>
-        <a onClick={backToSite}>{overview.customer.name}</a>
-        {selMachine && (
-          <>
-            <span className="sep">›</span>
-            <a onClick={() => setMode('machine')}>{selMachine.folder}</a>
-          </>
-        )}
-        {mode === 'ask' && (
-          <>
-            <span className="sep">›</span>
-            <span>Frage</span>
-          </>
-        )}
-      </div>
-
-      {mode === 'site' && (
-        <SiteOverview
-          overview={overview}
-          primary={primary}
-          sonstiges={sonstiges}
-          hersteller={hersteller}
-          kunde={kunde}
-          herstellerOptions={herstellerOptions}
-          kundenOptions={kundenOptions}
-          sonstigesOpen={sonstigesOpen}
-          onPickMachine={pickMachine}
-          onChangeKunde={setKunde}
-          onChangeHersteller={setHersteller}
-          onToggleSonstiges={() => setSonstigesOpen(!sonstigesOpen)}
-          query={query}
-          setQuery={setQuery}
-          deep={deep}
-          setDeep={setDeep}
-          loading={loading}
-          onAsk={() => runQuery()}
+    <div className="proto-app">
+      {!workspaceOpen || !selectedMachine ? (
+        <SelectionView
+          customer={customer}
+          customerOptions={customerOptions}
+          machineSlug={machineSlug}
+          machines={availableMachines}
+          selectedMachine={selectedMachine}
+          onCustomerChange={changeCustomer}
+          onMachineChange={setMachineSlug}
+          onContinue={enterWorkspace}
         />
-      )}
-
-      {mode === 'machine' && selMachine && (
-        <MachineLanding
-          machine={selMachine}
-          query={query}
-          setQuery={setQuery}
-          onAsk={() => runQuery()}
-          onSuggest={runQuery}
-          deep={deep}
-          setDeep={setDeep}
-          loading={loading}
-          sessions={chatSessions}
-          onOpenChat={openChat}
-          onBack={backToSite}
-        />
-      )}
-
-      {mode === 'ask' && (
-        <AskView
+      ) : (
+        <ChatWorkspace
+          machine={selectedMachine}
+          customer={customer}
           query={query}
           setQuery={setQuery}
           askedQuery={askedQuery}
-          onAsk={() => runQuery()}
           loading={loading}
           sessions={chatSessions}
           activeChat={activeChat}
@@ -256,245 +231,263 @@ export function ProtoPage() {
           selectedAssistantId={selectedAssistantId}
           setSelectedAssistantId={setSelectedAssistantId}
           onOpenChat={openChat}
-          deep={deep}
-          setDeep={setDeep}
+          onNewChat={newChat}
+          onChangeScope={leaveWorkspace}
+          onAsk={runQuery}
           activeCite={activeCite}
           setActiveCite={setActiveCite}
           showSection={showSection}
           sectionDetail={sectionDetail}
           setSectionDetail={setSectionDetail}
           setLightbox={setLightbox}
-          scope={selMachine ? selMachine.folder : kunde === 'Alle' ? 'Alle Maschinen' : kunde}
-          onBack={selMachine ? () => setMode('machine') : backToSite}
         />
       )}
 
       {lightbox && (
         <div className="proto-lightbox" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="" />
+          <img src={lightbox} alt="Dokumentvorschau" />
         </div>
       )}
     </div>
   )
 }
 
-// ── Site overview ─────────────────────────────────────────────
-
-function SiteOverview({
-  overview,
-  primary,
-  sonstiges,
-  kunde,
-  hersteller,
-  kundenOptions,
-  herstellerOptions,
-  sonstigesOpen,
-  onPickMachine,
-  onChangeKunde,
-  onChangeHersteller,
-  onToggleSonstiges,
-  query,
-  setQuery,
-  deep,
-  setDeep,
-  loading,
-  onAsk,
+function SelectionView({
+  customer,
+  customerOptions,
+  machineSlug,
+  machines,
+  selectedMachine,
+  onCustomerChange,
+  onMachineChange,
+  onContinue,
 }: {
-  overview: CustomerOverview
-  primary: CustomerOverview['machines']
-  sonstiges: CustomerOverview['machines']
-  kunde: string
-  hersteller: string
-  kundenOptions: string[]
-  herstellerOptions: string[]
-  sonstigesOpen: boolean
-  onPickMachine: (slug: string) => void
-  onChangeKunde: (k: string) => void
-  onChangeHersteller: (h: string) => void
-  onToggleSonstiges: () => void
-  query: string
-  setQuery: (s: string) => void
-  deep: boolean
-  setDeep: (b: boolean) => void
-  loading: boolean
-  onAsk: () => void
+  customer: string
+  customerOptions: string[]
+  machineSlug: string
+  machines: Machine[]
+  selectedMachine: Machine | null
+  onCustomerChange: (value: string) => void
+  onMachineChange: (value: string) => void
+  onContinue: () => void
 }) {
-  const s = overview.stats
+  const hasSingleCustomer = customerOptions.length === 1
+
   return (
-    <>
-      <section className="proto2-hero">
-        <h1>{overview.customer.name}</h1>
-        <div className="meta">
-          {overview.customer.machine_count} Maschinen · Wissensdatenbank aus
-          Hersteller- und Service-Dokumentation
+    <main className="proto-select-page">
+      <section className="proto-select-intro">
+        <div className="proto-eyebrow">
+          <span className="proto-status-dot" />
+          Operative Wissensdatenbank
         </div>
-        <div className="stats">
-          <Stat v={s.machines} l="Maschinen" />
-          <Stat v={s.documents} l="Indexierte Dokumente" />
-          <Stat v={s.pages} l="Seiten analysiert" />
-          <Stat v={s.images} l="Bilder & Schemata" />
-          <Stat v={s.configs} l="Konfigurationen" />
-        </div>
+        <h1>
+          {hasSingleCustomer
+            ? 'Welche Maschine betrifft Ihr Anliegen?'
+            : 'Für welchen Einsatz benötigen Sie Hilfe?'}
+        </h1>
+        {!hasSingleCustomer && (
+          <p>
+            Wählen Sie Kunde und Maschine. So durchsuchen wir nur die Dokumentation, die zu Ihrem Einsatz gehört.
+          </p>
+        )}
       </section>
 
-      <div className="proto2-ask-bar">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !loading && onAsk()}
-          placeholder='Frage zur gesamten Anlage — z. B. „Welche Maschinen verwenden Avery-Druckköpfe?"'
-        />
-        <label className="deep">
-          <input
-            type="checkbox"
-            checked={deep}
-            onChange={(e) => setDeep(e.target.checked)}
-          />
-          Deep mode
-        </label>
-        <button onClick={onAsk} disabled={loading || !query.trim()}>
-          {loading ? <span>Denke nach<ThinkingDots /></span> : 'Fragen'}
-        </button>
-      </div>
-      <div className="proto2-ask-meta">
-        Standard-Bereich:{' '}
-        <strong>{kunde === 'Alle' ? `alle ${s.machines} Maschinen` : kunde}</strong> ·
-        nach Klick auf eine Maschine weiter eingrenzbar
-      </div>
-
-      <div className="proto2-section-row">
-        <div className="proto2-section-title">Maschinen</div>
-        <div className="proto2-filters">
-          <div className="proto2-filter-row">
-            <span className="label">Kunde:</span>
-            <CustomerPicker value={kunde} options={kundenOptions} onChange={onChangeKunde} />
-          </div>
-          <div className="proto2-filter-row">
-            <span className="label">Hersteller:</span>
-            {herstellerOptions.map((h) => (
-              <span
-                key={h}
-                className={`chip ${hersteller === h ? 'active' : ''}`}
-                onClick={() => onChangeHersteller(h)}
-              >
-                {h}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="proto2-machine-grid">
-        {primary.map((m) => (
-          <MachineCard key={m.slug} machine={m} onClick={() => onPickMachine(m.slug)} />
-        ))}
-      </div>
-
-      {sonstiges.length > 0 && (
-        <div className={`proto2-sonstiges ${sonstigesOpen ? 'open' : ''}`}>
-          <div className="row" onClick={onToggleSonstiges}>
+      <section className="proto-select-card" aria-label="Einsatz auswählen">
+        <div className={`proto-select-step ${customer ? 'complete' : 'active'}`}>
+          <div className="proto-step-number">{customer ? '✓' : '1'}</div>
+          <div className="proto-step-content">
+            <label htmlFor="proto-customer">Kunde</label>
             <span>
-              {sonstigesOpen ? '▾' : '▸'} Ohne indexierbare Dokumentation (
-              {sonstiges.length} Maschinen — nur externe Verknüpfungen)
+              {hasSingleCustomer
+                ? 'Für Ihren Zugang vorausgewählt'
+                : 'Für welchen Kunden sind Sie im Einsatz?'}
             </span>
-            <span className="toggle">{sonstigesOpen ? 'einklappen' : 'aufklappen'}</span>
-          </div>
-          {sonstigesOpen && (
-            <div className="items">
-              {sonstiges.map((m) => (
-                <div
-                  key={m.slug}
-                  className="sonst-mini"
-                  onClick={() => onPickMachine(m.slug)}
+            {hasSingleCustomer ? (
+              <div className="proto-static-client" id="proto-customer">
+                <ClientIcon />
+                <span>
+                  <strong>{customerOptions[0]}</strong>
+                  <small>Ihr zugewiesener Kunde</small>
+                </span>
+                <span className="proto-static-check">✓</span>
+              </div>
+            ) : (
+              <div className="proto-select-control">
+                <ClientIcon />
+                <select
+                  id="proto-customer"
+                  value={customer}
+                  onChange={(event) => onCustomerChange(event.target.value)}
                 >
-                  <span className="lbl">{m.hersteller}</span>
-                  {m.folder}
-                </div>
-              ))}
-            </div>
-          )}
+                  <option value="">Kunden auswählen</option>
+                  {customerOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+                <ChevronIcon />
+              </div>
+            )}
+          </div>
         </div>
-      )}
-    </>
+
+        <div className={`proto-select-connector ${customer ? 'ready' : ''}`} />
+
+        <div className={`proto-select-step ${machineSlug ? 'complete' : customer ? 'active' : ''}`}>
+          <div className="proto-step-number">{machineSlug ? '✓' : '2'}</div>
+          <div className="proto-step-content">
+            <label htmlFor="proto-machine">Maschine</label>
+            <span>Zu welcher Maschine haben Sie eine Frage?</span>
+            <SearchableMachineSelect
+              id="proto-machine"
+              value={machineSlug}
+              machines={machines}
+              disabled={!customer}
+              onChange={onMachineChange}
+            />
+          </div>
+        </div>
+
+        {selectedMachine && (
+          <div className="proto-machine-summary">
+            <div className="proto-machine-summary-icon"><MachineIcon /></div>
+            <div>
+              <strong>{selectedMachine.model || selectedMachine.folder}</strong>
+              <span>{selectedMachine.type || 'Maschine'} · {selectedMachine.hersteller}</span>
+            </div>
+            <div className="proto-machine-docs">
+              {selectedMachine.pdfs ?? 0} PDF · {selectedMachine.sections ?? 0} Seiten
+            </div>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="proto-primary-action"
+          disabled={!machineSlug}
+          onClick={onContinue}
+        >
+          Unterhaltung starten
+          <ArrowIcon />
+        </button>
+      </section>
+
+      <p className="proto-select-footnote">
+        <ShieldIcon /> Antworten basieren ausschließlich auf freigegebener Maschinen- und Service-Dokumentation.
+      </p>
+    </main>
   )
 }
 
-function Stat({ v, l }: { v: number | string; l: string }) {
-  const formatted =
-    typeof v === 'number' && v >= 1000
-      ? v.toLocaleString('de-CH').replace(/,/g, "'")
-      : v
-  return (
-    <div className="proto2-stat">
-      <span className="v">{formatted}</span>
-      <span className="l">{l}</span>
-    </div>
-  )
-}
-
-function CustomerPicker({
+function SearchableMachineSelect({
+  id,
   value,
-  options,
+  machines,
+  disabled,
   onChange,
 }: {
+  id: string
   value: string
-  options: string[]
+  machines: Machine[]
+  disabled: boolean
   onChange: (value: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const visibleOptions = useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    return options
-      .filter((option) => option === 'Alle' || !needle || option.toLowerCase().includes(needle))
-      .slice(0, 50)
-  }, [options, search])
-  const label = value === 'Alle' ? 'Alle Kunden' : value
+  const selectedMachine = machines.find((machine) => machine.slug === value) || null
+  const visibleMachines = useMemo(() => {
+    const needle = search.trim().toLocaleLowerCase('de-CH')
+    if (!needle) return machines.slice(0, 100)
+    return machines
+      .filter((machine) => (
+        [
+          machine.model,
+          machine.folder,
+          machine.serial,
+          machine.type,
+          machine.hersteller,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleLowerCase('de-CH')
+          .includes(needle)
+      ))
+      .slice(0, 100)
+  }, [machines, search])
 
-  function pick(option: string) {
-    onChange(option)
+  function pick(machine: Machine) {
+    onChange(machine.slug)
     setSearch('')
     setOpen(false)
   }
 
   return (
-    <div className="proto2-customer-picker">
+    <div className={`proto-machine-picker ${open ? 'open' : ''} ${disabled ? 'disabled' : ''}`}>
+      <MachineIcon />
       <input
-        aria-label="Kunde auswählen"
-        value={open ? search : label}
+        id={id}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={`${id}-options`}
+        aria-autocomplete="list"
+        autoComplete="off"
+        disabled={disabled}
+        value={open ? search : selectedMachine ? machineLabel(selectedMachine) : ''}
+        placeholder={disabled ? 'Zuerst Kunden auswählen' : 'Maschine suchen …'}
         onFocus={() => {
-          setOpen(true)
           setSearch('')
-        }}
-        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
-        onChange={(e) => {
-          setSearch(e.target.value)
           setOpen(true)
         }}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
+        onChange={(event) => {
+          setSearch(event.target.value)
+          setOpen(true)
+        }}
+        onBlur={() => window.setTimeout(() => setOpen(false), 140)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
             setOpen(false)
+            setSearch('')
           }
-          if (e.key === 'Enter' && open && visibleOptions.length > 0) {
-            pick(visibleOptions[0])
+          if (event.key === 'Enter' && open && visibleMachines.length > 0) {
+            event.preventDefault()
+            pick(visibleMachines[0])
           }
         }}
-        placeholder="Kunde suchen"
       />
+      <SearchIcon />
       {open && (
-        <div className="proto2-customer-menu" onMouseDown={(e) => e.preventDefault()}>
-          {visibleOptions.map((option) => (
+        <div
+          className="proto-machine-menu"
+          id={`${id}-options`}
+          role="listbox"
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          <div className="proto-machine-menu-count">
+            {visibleMachines.length === machines.length
+              ? `${machines.length} Maschinen`
+              : `${visibleMachines.length} von ${machines.length} Maschinen`}
+          </div>
+          {visibleMachines.length > 0 ? visibleMachines.map((machine) => (
             <button
-              key={option}
+              key={machine.slug}
               type="button"
-              className={option === value ? 'active' : ''}
-              onClick={() => pick(option)}
+              role="option"
+              aria-selected={machine.slug === value}
+              className={machine.slug === value ? 'selected' : ''}
+              onClick={() => pick(machine)}
             >
-              {option === 'Alle' ? 'Alle Kunden' : option}
+              <span className="proto-machine-option-icon"><MachineIcon /></span>
+              <span>
+                <strong>{machine.model || machine.folder}</strong>
+                <small>
+                  {[machine.type, machine.hersteller, machine.serial].filter(Boolean).join(' · ')}
+                </small>
+              </span>
+              {machine.slug === value && <span className="proto-machine-option-check">✓</span>}
             </button>
-          ))}
-          {visibleOptions.length === 0 && (
-            <div className="empty">Keine Kunden gefunden</div>
+          )) : (
+            <div className="proto-machine-menu-empty">
+              Keine passende Maschine gefunden
+            </div>
           )}
         </div>
       )}
@@ -502,169 +495,16 @@ function CustomerPicker({
   )
 }
 
-function MachineCard({
-  machine,
-  onClick,
-}: {
-  machine: CustomerOverview['machines'][number]
-  onClick: () => void
-}) {
-  const docs = machine.pdfs ?? 0
-  const imgs = machine.imgs ?? 0
-  const cfgs = machine.txts ?? 0
-  const sections = machine.sections ?? 0
-
-  let summary = ''
-  if (docs > 0 && sections > 0) {
-    summary = `${sections} Seiten technische Dokumentation indexiert${cfgs > 0 ? `, ${cfgs} Kunden-Konfigurationen` : ''}${imgs > 0 ? `, ${imgs} Schemata/Bilder` : ''}.`
-  } else if (imgs > 0) {
-    summary = `${imgs} Bilder verfügbar — keine PDF-Dokumentation indexiert.`
-  } else if (cfgs > 0) {
-    summary = `${cfgs} Konfigurationsdateien.`
-  } else {
-    summary = 'Keine indexierbaren Inhalte.'
-  }
-
-  return (
-    <div className="proto2-machine-card" onClick={onClick}>
-      <div className="type">
-        {machine.type || 'Maschine'} · {machine.hersteller}
-      </div>
-      <div className="name">{machine.model || machine.folder}</div>
-      <div className="serial">{machine.serial || ''}</div>
-      <div className="summary">{summary}</div>
-      <div className="badges">
-        {docs > 0 && (
-          <span className="tag docs">
-            📘 {docs} PDF{sections > 0 ? ` · ${sections} S.` : ''}
-          </span>
-        )}
-        {cfgs > 0 && <span className="tag cfg">⚙ {cfgs} Cfg</span>}
-        {imgs > 0 && <span className="tag img">🖼 {imgs}</span>}
-      </div>
-    </div>
-  )
+function machineLabel(machine: Machine): string {
+  return `${machine.model || machine.folder}${machine.serial ? ` · ${machine.serial}` : ''}`
 }
 
-// ── Machine landing ───────────────────────────────────────────
-
-function MachineLanding({
+function ChatWorkspace({
   machine,
-  query,
-  setQuery,
-  onAsk,
-  onSuggest,
-  deep,
-  setDeep,
-  loading,
-  sessions,
-  onOpenChat,
-  onBack,
-}: {
-  machine: CustomerOverview['machines'][number]
-  query: string
-  setQuery: (s: string) => void
-  onAsk: () => void
-  onSuggest: (q: string) => void
-  deep: boolean
-  setDeep: (b: boolean) => void
-  loading: boolean
-  sessions: ProtoChatSession[]
-  onOpenChat: (session: ProtoChatSession) => void
-  onBack: () => void
-}) {
-  const suggestions = buildSuggestions(machine)
-
-  return (
-    <>
-      <a className="proto2-nav-back" onClick={onBack}>
-        ← Zurück zur Übersicht
-      </a>
-
-      <div className="proto2-machine-hero">
-        <div className="info">
-          <div className="type">
-            {machine.type} · {machine.hersteller}
-          </div>
-          <h1>{machine.model || machine.folder}</h1>
-          <div className="serial">
-            {machine.serial && <>Serien-Nr. {machine.serial}</>}
-          </div>
-          <div className="counts">
-            <span>{machine.pdfs ?? 0} PDF</span>
-            <span>{machine.sections ?? 0} indexierte Seiten</span>
-            <span>{machine.imgs ?? 0} Bilder</span>
-            <span>{machine.txts ?? 0} Konfigurationen</span>
-          </div>
-        </div>
-        <div className="suggestions">
-          <h3>Vorgeschlagene Fragen</h3>
-          {suggestions.map((s) => (
-            <div className="qa-item" key={s} onClick={() => onSuggest(s)}>
-              {s}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <section className="proto2-machine-chats">
-        <div className="proto2-machine-chats-head">
-          <div>
-            <div className="label">Gespeicherte Chats</div>
-            <h3>Vergangene Unterhaltungen</h3>
-          </div>
-          <span>{sessions.length}</span>
-        </div>
-        {sessions.length === 0 ? (
-          <div className="empty">Noch keine Chats zu dieser Maschine.</div>
-        ) : (
-          <div className="items">
-            {sessions.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                onClick={() => onOpenChat(session)}
-              >
-                <span className="title">{session.title || 'Neue Unterhaltung'}</span>
-                <span className="meta">
-                  {session.message_count ?? 0} Nachrichten · {formatDateShort(session.last_message_at || session.updated_at)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <div className="proto2-ask-bar">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !loading && onAsk()}
-          placeholder="Frage zu dieser Maschine — Ersatzteil, Schema, Wartungsschritt…"
-        />
-        <label className="deep">
-          <input
-            type="checkbox"
-            checked={deep}
-            onChange={(e) => setDeep(e.target.checked)}
-          />
-          Deep mode
-        </label>
-        <button onClick={onAsk} disabled={loading || !query.trim()}>
-          {loading ? <span>Denke nach<ThinkingDots /></span> : 'Fragen'}
-        </button>
-      </div>
-    </>
-  )
-}
-
-// ── Ask view ───────────────────────────────────────────────────
-
-function AskView({
+  customer,
   query,
   setQuery,
   askedQuery,
-  onAsk,
   loading,
   sessions,
   activeChat,
@@ -672,21 +512,21 @@ function AskView({
   selectedAssistantId,
   setSelectedAssistantId,
   onOpenChat,
-  deep,
-  setDeep,
+  onNewChat,
+  onChangeScope,
+  onAsk,
   activeCite,
   setActiveCite,
   showSection,
   sectionDetail,
   setSectionDetail,
   setLightbox,
-  scope,
-  onBack,
 }: {
+  machine: Machine
+  customer: string
   query: string
-  setQuery: (s: string) => void
+  setQuery: (value: string) => void
   askedQuery: string
-  onAsk: () => void
   loading: boolean
   sessions: ProtoChatSession[]
   activeChat: ProtoChatSession | null
@@ -694,202 +534,275 @@ function AskView({
   selectedAssistantId: string | null
   setSelectedAssistantId: (id: string | null) => void
   onOpenChat: (session: ProtoChatSession) => void
-  deep: boolean
-  setDeep: (b: boolean) => void
+  onNewChat: () => void
+  onChangeScope: () => void
+  onAsk: (query?: string) => void
   activeCite: number | null
-  setActiveCite: (n: number | null) => void
-  showSection: (id: string | undefined, idx: number) => void
+  setActiveCite: (value: number | null) => void
+  showSection: (id: string | undefined, index: number) => void
   sectionDetail: ProtoSectionDetail | null
-  setSectionDetail: (s: ProtoSectionDetail | null) => void
-  setLightbox: (s: string | null) => void
-  scope: string
-  onBack: () => void
+  setSectionDetail: (section: ProtoSectionDetail | null) => void
+  setLightbox: (url: string | null) => void
 }) {
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const threadEndRef = useRef<HTMLDivElement | null>(null)
+  const suggestions = buildSuggestions(machine).slice(0, 4)
+
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [loading, messages])
+
   const selectedAssistant =
-    messages.find((m) => m.id === selectedAssistantId && m.role === 'assistant') ||
-    [...messages].reverse().find((m) => m.role === 'assistant') ||
+    messages.find((message) => message.id === selectedAssistantId && message.role === 'assistant') ||
+    [...messages].reverse().find((message) => message.role === 'assistant') ||
     null
   const selectedAssistantIndex = selectedAssistant
-    ? messages.findIndex((m) => m.id === selectedAssistant.id)
+    ? messages.findIndex((message) => message.id === selectedAssistant.id)
     : -1
-  const selectedQuery =
-    selectedAssistantIndex > 0
-      ? [...messages.slice(0, selectedAssistantIndex)]
-          .reverse()
-          .find((m) => m.role === 'user')?.text || askedQuery
-      : askedQuery
+  const selectedQuery = selectedAssistantIndex > 0
+    ? [...messages.slice(0, selectedAssistantIndex)].reverse().find((message) => message.role === 'user')?.text || askedQuery
+    : askedQuery
+
+  function chooseChat(session: ProtoChatSession) {
+    void onOpenChat(session)
+    setHistoryOpen(false)
+  }
+
+  function beginNewChat() {
+    onNewChat()
+    setHistoryOpen(false)
+  }
 
   return (
-    <>
-      <a className="proto2-nav-back" onClick={onBack}>
-        ← Zurück
-      </a>
-      <div className="proto2-ask-meta">Bereich: <strong>{scope}</strong></div>
+    <div className="proto-workspace">
+      {historyOpen && (
+        <button
+          className="proto-sidebar-backdrop"
+          aria-label="Verlauf schließen"
+          onClick={() => setHistoryOpen(false)}
+        />
+      )}
 
-      <div className="proto-chat-shell">
-        <aside className="proto-chat-history">
-          <div className="proto-chat-history-title">Chats</div>
-          {sessions.length === 0 && (
-            <div className="proto-chat-empty">Noch keine gespeicherten Chats</div>
-          )}
-          {sessions.map((session) => (
+      <aside className={`proto-chat-sidebar ${historyOpen ? 'open' : ''}`}>
+        <div className="proto-sidebar-mobile-head">
+          <strong>Unterhaltungen</strong>
+          <button type="button" onClick={() => setHistoryOpen(false)} aria-label="Verlauf schließen">×</button>
+        </div>
+        <button type="button" className="proto-new-chat" onClick={beginNewChat}>
+          <PlusIcon /> Neuer Chat
+        </button>
+        <div className="proto-history-label">Verlauf</div>
+        <div className="proto-history-list">
+          {sessions.length === 0 ? (
+            <div className="proto-history-empty">
+              Ihre Unterhaltungen zu dieser Maschine erscheinen hier.
+            </div>
+          ) : sessions.map((session) => (
             <button
               key={session.id}
               type="button"
               className={activeChat?.id === session.id ? 'active' : ''}
-              onClick={() => onOpenChat(session)}
+              onClick={() => chooseChat(session)}
             >
-              <span className="title">{session.title || 'Neue Unterhaltung'}</span>
-              <span className="meta">
-                {session.message_count ?? 0} Nachrichten · {formatDateShort(session.last_message_at || session.updated_at)}
+              <ChatIcon />
+              <span>
+                <strong>{session.title || 'Neue Unterhaltung'}</strong>
+                <small>{formatDateShort(session.last_message_at || session.updated_at)}</small>
               </span>
             </button>
           ))}
-        </aside>
+        </div>
+        <button type="button" className="proto-scope-card" onClick={onChangeScope}>
+          <span className="proto-scope-icon"><MachineIcon /></span>
+          <span>
+            <small>Aktive Maschine</small>
+            <strong>{machine.model || machine.folder}</strong>
+            <em>{customer}</em>
+          </span>
+          <ChevronIcon direction="right" />
+        </button>
+      </aside>
 
-        <div className="proto-chat-main">
-          <div className="proto-chat-thread">
-            {messages.length === 0 && !loading && (
-              <div className="proto-chat-start">
-                Starte eine Unterhaltung zu diesem Bereich. Folgefragen bleiben im Kontext und werden gespeichert.
-              </div>
-            )}
-            {messages.map((msg) => (
-              <div key={msg.id} className={`proto-chat-message ${msg.role}`}>
-                <div className="proto-chat-message-meta">
-                  <span>{msg.role === 'user' ? msg.username || 'User' : 'Assistant'}</span>
-                  <span>{formatDateShort(msg.created_at)}</span>
-                </div>
-                {msg.role === 'assistant' ? (
-                  <>
-                    <div
-                      className="proto-answer"
-                      dangerouslySetInnerHTML={{ __html: formatAnswer(msg.text) }}
-                    />
-                    {msg.model && (
-                      <div className="proto-model-label">model: {msg.model}</div>
-                    )}
-                    {(msg.citations?.length ?? 0) > 0 && (
-                      <div className="proto-citations">
-                        {msg.citations!.map((c) => (
-                          <button
-                            key={`${msg.id}-${c.idx}`}
-                            className={`proto-cite ${selectedAssistant?.id === msg.id && activeCite === c.idx ? 'active' : ''}`}
-                            onClick={() => {
-                              setSelectedAssistantId(msg.id)
-                              if (c.kind === 'page' && c.section_id) {
-                                showSection(c.section_id, c.idx)
-                              } else {
-                                setActiveCite(c.idx)
-                                setSectionDetail(null)
-                              }
-                            }}
-                            title={`${c.machine} / ${c.doc}`}
-                          >
-                            [{c.idx}] {c.kind === 'page' ? `p.${c.page}` : c.name || c.doc}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="proto-chat-user-text">{msg.text}</div>
-                )}
-              </div>
-            ))}
-            {loading && (
-              <div className="proto-chat-message assistant pending">
-                <div className="proto-chat-message-meta">
-                  <span>Assistant</span>
-                  <span>arbeitet</span>
-                </div>
-                <div>
-                  Verarbeite „{askedQuery}"<ThinkingDots />
-                </div>
-              </div>
-            )}
+      <section className="proto-conversation">
+        <header className="proto-conversation-header">
+          <button
+            type="button"
+            className="proto-mobile-menu"
+            onClick={() => setHistoryOpen(true)}
+            aria-label="Verlauf öffnen"
+          >
+            <MenuIcon />
+          </button>
+          <div className="proto-conversation-scope">
+            <strong>{machine.model || machine.folder}</strong>
+            <span>{customer} · {machine.hersteller}</span>
           </div>
+          <button type="button" className="proto-change-scope" onClick={onChangeScope}>
+            Maschine wechseln
+          </button>
+        </header>
 
+        <div className="proto-thread-scroll">
+          {messages.length === 0 && !loading ? (
+            <div className="proto-chat-welcome">
+              <div className="proto-welcome-mark"><MachineIcon /></div>
+              <h1>Wie kann ich bei dieser Maschine helfen?</h1>
+              <p>
+                Ich durchsuche Handbücher, Service-Dokumentation, Konfigurationen und Schemata für <strong>{machine.model || machine.folder}</strong>.
+              </p>
+              <div className="proto-suggestions">
+                {suggestions.map((suggestion) => (
+                  <button key={suggestion} type="button" onClick={() => onAsk(suggestion)}>
+                    <span>{suggestion}</span>
+                    <ArrowIcon />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="proto-message-list">
+              {messages.map((message) => (
+                <div key={message.id} className={`proto-chat-message ${message.role}`}>
+                  <div className="proto-avatar" aria-hidden="true">
+                    {message.role === 'assistant' ? 'M' : (message.username || 'S').slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="proto-message-content">
+                    <div className="proto-chat-message-meta">
+                      <strong>{message.role === 'assistant' ? 'MachineGKI' : message.username || 'Sie'}</strong>
+                      <span>{formatDateShort(message.created_at)}</span>
+                    </div>
+                    {message.role === 'assistant' ? (
+                      <>
+                        <div
+                          className="proto-answer"
+                          dangerouslySetInnerHTML={{ __html: formatAnswer(message.text) }}
+                        />
+                        {(message.citations?.length ?? 0) > 0 && (
+                          <div className="proto-citations">
+                            {message.citations!.map((citation) => (
+                              <button
+                                key={`${message.id}-${citation.idx}`}
+                                className={`proto-cite ${selectedAssistant?.id === message.id && activeCite === citation.idx ? 'active' : ''}`}
+                                onClick={() => {
+                                  setSelectedAssistantId(message.id)
+                                  if (citation.kind === 'page' && citation.section_id) {
+                                    void showSection(citation.section_id, citation.idx)
+                                  } else {
+                                    setActiveCite(citation.idx)
+                                    setSectionDetail(null)
+                                  }
+                                }}
+                              >
+                                [{citation.idx}] {citation.kind === 'page' ? `Seite ${citation.page}` : citation.name || citation.doc}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="proto-chat-user-text">{message.text}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {loading && (
+                <div className="proto-chat-message assistant pending">
+                  <div className="proto-avatar">M</div>
+                  <div className="proto-message-content">
+                    <div className="proto-chat-message-meta">
+                      <strong>MachineGKI</strong>
+                      <span>arbeitet</span>
+                    </div>
+                    <div>Durchsuche die Maschinendokumentation<ThinkingDots /></div>
+                  </div>
+                </div>
+              )}
+
+              {selectedAssistant && (selectedAssistant.hits?.length ?? 0) > 0 && (
+                <section className="proto-chat-evidence">
+                  <div className="proto-chat-evidence-title">Quellen zur ausgewählten Antwort</div>
+                  <div className="proto-hits">
+                    {selectedAssistant.hits!.map((hit, index) => (
+                      <HitCard
+                        key={`${selectedAssistant.id}-${hit.label}-${hit.id}`}
+                        hit={hit}
+                        idx={index + 1}
+                        active={activeCite === index + 1}
+                        query={selectedQuery}
+                        onClick={() => {
+                          setSelectedAssistantId(selectedAssistant.id)
+                          if (hit.label === 'ManualSection') {
+                            void showSection(hit.id, index + 1)
+                          } else {
+                            setActiveCite(index + 1)
+                            setSectionDetail(null)
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {sectionDetail && (
+                <aside className="proto-detail">
+                  <h3>
+                    {sectionDetail.machine} ·{' '}
+                    <a
+                      href={`/api/proto/view/${sectionDetail.doc_id}?page=${sectionDetail.page}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="proto-hit-doc-link"
+                    >
+                      {sectionDetail.doc_name} ↗
+                    </a>{' '}
+                    · Seite {sectionDetail.page}
+                  </h3>
+                  <div className="proto-detail-big">
+                    <img
+                      src={`/api/proto/page-image/${sectionDetail.id}`}
+                      alt="Dokumentseite"
+                      onClick={() => setLightbox(`/api/proto/page-image/${sectionDetail.id}`)}
+                    />
+                  </div>
+                </aside>
+              )}
+              <div ref={threadEndRef} />
+            </div>
+          )}
+        </div>
+
+        <footer className="proto-composer-wrap">
           <div className="proto-chat-composer">
             <textarea
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !loading && query.trim()) {
-                  e.preventDefault()
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey && !loading && query.trim()) {
+                  event.preventDefault()
                   onAsk()
                 }
               }}
-              placeholder="Nachricht schreiben…"
-              rows={2}
+              placeholder="Fragen Sie MachineGKI …"
+              rows={1}
             />
-            <label className="deep">
-              <input
-                type="checkbox"
-                checked={deep}
-                onChange={(e) => setDeep(e.target.checked)}
-              />
-              Deep mode
-            </label>
-            <button onClick={onAsk} disabled={loading || !query.trim()}>
-              {loading ? <span>Denke nach<ThinkingDots /></span> : 'Senden'}
+            <button
+              type="button"
+              className="proto-send"
+              onClick={() => onAsk()}
+              disabled={loading || !query.trim()}
+              aria-label="Nachricht senden"
+            >
+              <SendIcon />
             </button>
           </div>
-        </div>
-      </div>
-
-      {selectedAssistant && (selectedAssistant.hits?.length ?? 0) > 0 && (
-        <div className="proto-answer-block proto-chat-evidence">
-          <div className="proto-chat-evidence-title">Quellen zur ausgewählten Antwort</div>
-          <div className="proto-hits">
-            {selectedAssistant.hits!.map((h, i) => (
-              <HitCard
-                key={`${selectedAssistant.id}-${h.label}-${h.id}`}
-                hit={h}
-                idx={i + 1}
-                active={activeCite === i + 1}
-                query={selectedQuery}
-                onClick={() => {
-                  setSelectedAssistantId(selectedAssistant.id)
-                  if (h.label === 'ManualSection') {
-                    showSection(h.id, i + 1)
-                  } else {
-                    setActiveCite(i + 1)
-                    setSectionDetail(null)
-                  }
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {sectionDetail && (
-        <aside className="proto-detail">
-          <h3>
-            {sectionDetail.machine} ·{' '}
-            <a
-              href={`/api/proto/view/${sectionDetail.doc_id}?page=${sectionDetail.page}`}
-              target="_blank"
-              rel="noreferrer"
-              className="proto-hit-doc-link"
-            >
-              {sectionDetail.doc_name} ↗
-            </a>{' '}
-            · p.{sectionDetail.page}
-          </h3>
-          <div className="proto-detail-big">
-            <img
-              src={`/api/proto/page-image/${sectionDetail.id}`}
-              alt=""
-              onClick={() =>
-                setLightbox(`/api/proto/page-image/${sectionDetail.id}`)
-              }
-            />
-          </div>
-        </aside>
-      )}
-    </>
+          <p>
+            Antworten können Ungenauigkeiten enthalten. Erkenntnisse werden automatisch in Ihrer Wissensbasis gespeichert.
+          </p>
+        </footer>
+      </section>
+    </div>
   )
 }
 
@@ -914,40 +827,32 @@ function HitCard({
     : isImage
       ? `/api/proto/asset-image/${hit.id}`
       : null
-
   let headline = ''
   let sub = ''
+
   if (isPage) {
-    const v = hit.vision_desc || ''
-    const ps = v.match(/##\s*Page\s*summary\s*\n+([^\n]+)/i)
-    headline = ps ? ps[1].trim() : firstNonEmpty(v) || firstNonEmpty(hit.text || '') || ''
-    sub = highlightSnippet(hit.text || v || '', query, 120)
+    const description = hit.vision_desc || ''
+    const pageSummary = description.match(/##\s*Page\s*summary\s*\n+([^\n]+)/i)
+    headline = pageSummary ? pageSummary[1].trim() : firstNonEmpty(description) || firstNonEmpty(hit.text || '')
+    sub = highlightSnippet(hit.text || description, query, 120)
   } else if (label === 'ConfigFile') {
-    const s = hit.summary || ''
-    const cust = s.match(/CUSTOMER:\s*([^\n]+)/i)
-    const purp = s.match(/PURPOSE:\s*([^\n]+)/i)
-    const search = s.match(/SEARCHABLE:\s*([\s\S]+?)(?:\n\n|$)/i)
-    headline = purp ? purp[1].trim() : firstNonEmpty(s)
-    sub = (cust ? `👤 ${cust[1].trim()} — ` : '') +
-      (search ? search[1].trim() : highlightSnippet(s, query, 160))
+    const summary = hit.summary || ''
+    const purpose = summary.match(/PURPOSE:\s*([^\n]+)/i)
+    headline = purpose ? purpose[1].trim() : firstNonEmpty(summary)
+    sub = highlightSnippet(summary, query, 150)
   } else if (isImage) {
-    const c = hit.caption || ''
-    const at = c.match(/##\s*Asset\s*type\s*\n+([^\n]+)/i)
-    headline = at ? at[1].trim() : firstNonEmpty(c)
-    sub = highlightSnippet(c, query, 140)
+    headline = firstNonEmpty(hit.caption || '')
+    sub = highlightSnippet(hit.caption || '', query, 140)
   }
 
   return (
-    <div
-      className={`proto-hit ${label.toLowerCase()} ${active ? 'active' : ''}`}
-      onClick={onClick}
-    >
+    <article className={`proto-hit ${label.toLowerCase()} ${active ? 'active' : ''}`} onClick={onClick}>
       <div className="proto-hit-top">
         <SourceThumbnail src={thumbUrl} />
         <div className="proto-hit-meta">
           <div className="proto-hit-badge-row">
             <span className={`proto-hit-badge b-${label.toLowerCase()}`}>
-              [{idx}] {label.replace('ManualSection', 'PAGE').replace('ConfigFile', 'CONFIG').replace('ImageAsset', 'IMAGE')}
+              [{idx}] {label.replace('ManualSection', 'SEITE').replace('ConfigFile', 'CONFIG').replace('ImageAsset', 'BILD')}
             </span>
             <span className="proto-hit-score">{hit.score.toFixed(3)}</span>
           </div>
@@ -957,140 +862,127 @@ function HitCard({
             href={`/api/proto/view/${hit.document_id}${hit.page ? `?page=${hit.page}` : ''}`}
             target="_blank"
             rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            title="Original-Dokument im neuen Tab öffnen"
+            onClick={(event) => event.stopPropagation()}
           >
-            {hit.doc_name}
-            {hit.page ? ` · p.${hit.page}` : ''} ↗
+            {hit.doc_name}{hit.page ? ` · S. ${hit.page}` : ''} ↗
           </a>
         </div>
       </div>
       {headline && <div className="proto-hit-headline">{headline}</div>}
-      {sub && (
-        <div
-          className="proto-hit-snippet"
-          dangerouslySetInnerHTML={{ __html: sub }}
-        />
-      )}
-    </div>
+      {sub && <div className="proto-hit-snippet" dangerouslySetInnerHTML={{ __html: sub }} />}
+    </article>
   )
 }
 
 function SourceThumbnail({ src }: { src: string | null }) {
   const [failed, setFailed] = useState(false)
   if (!src || failed) {
-    return (
-      <div className="proto-hit-thumb proto-hit-thumb-fallback" aria-hidden="true">
-        <span>Kein Bild</span>
-      </div>
-    )
+    return <div className="proto-hit-thumb proto-hit-thumb-fallback">Quelle</div>
   }
+  return <img src={src} alt="" className="proto-hit-thumb" loading="lazy" onError={() => setFailed(true)} />
+}
+
+function ClientIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+}
+
+function MachineIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM8 3v4M16 3v4M8 12h.01M12 12h.01M16 12h.01M8 16h8" /></svg>
+}
+
+function ShieldIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10ZM9 12l2 2 4-4" /></svg>
+}
+
+function ChatIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></svg>
+}
+
+function PlusIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+}
+
+function MenuIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+}
+
+function SendIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4zM22 2 11 13" /></svg>
+}
+
+function SearchIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+}
+
+function ArrowIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+}
+
+function ChevronIcon({ direction = 'down' }: { direction?: 'down' | 'right' }) {
   return (
-    <img
-      src={src}
-      alt=""
-      className="proto-hit-thumb"
-      loading="lazy"
-      onError={() => setFailed(true)}
-    />
+    <svg className={direction === 'right' ? 'right' : ''} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
   )
 }
 
 function ThinkingDots() {
-  return (
-    <span className="proto-thinking-dots" aria-hidden="true">
-      <span>.</span>
-      <span>.</span>
-      <span>.</span>
-    </span>
-  )
+  return <span className="proto-thinking-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
 }
 
-// Hand-tuned high-confidence queries for known machines (proven to return
-// good answers in our benchmark)
 const KNOWN_GOOD: Record<string, string[]> = {
   smb: [
     'Welche Bestellnummer hat das Rillenkugellager der Umlenkrolle?',
     'Welche Baugruppen gehören zur 2.4 Mio Wartungsstufe?',
-    'Wo sitzen die Schaltnetzteile T14 und T15 — was ist die Klemmleiste darunter?',
-    'Wie transportiere ich die SMB S03 — wo sind die Hebepunkte markiert?',
-    'Aus welchen Teilen besteht die Spannrolle x17730_?',
+    'Wo sitzen die Schaltnetzteile T14 und T15?',
+    'Wo sind die Hebepunkte für den Transport markiert?',
   ],
   netjet1: [
-    'Adressiersystem meldet "Out of Sequence" — welche Registry-Parameter prüfen?',
+    'Was ist bei der Meldung „Out of Sequence“ zu prüfen?',
     'Welche GUI-Hardware-Konfiguration wird empfohlen?',
     'Wie wird der V4-Emulator eingerichtet?',
-    'Welche Job-Konfigurationen sind für den Kunden ENIWA hinterlegt?',
-    'Was zeigt die Bitmap ABB_600.bmp — für welche Sendungen ist sie?',
   ],
   netjet2: [
-    'Welche Bitmap-Templates sind für NetJet 2 hinterlegt?',
-    'Welche GUI-Konfigurationen unterscheidet sich von NetJet 1?',
-    'Was zeigt die Versions-Information der NetJet 2 GUI?',
+    'Welche Bitmap-Templates sind hinterlegt?',
+    'Wie unterscheidet sich die Konfiguration von NetJet 1?',
     'Wie ist das Kundennetzwerk eingerichtet?',
   ],
   cmc: [
-    'Wo sitzen die Heizungen und welche Schemata gibt es dafür?',
-    'Welche Seriennummern sind für die CMC 2800 dokumentiert?',
-    'Welche Avery-Komponenten sind in der Dokumentation aufgeführt?',
-  ],
-  inkjet_bx: [
-    'Welche Komponenten besteht der Encoder mit Steckerbox?',
-    'Welche Ersatzteile sind für die 14-Stationen-Variante aufgeführt?',
+    'Wo sitzen die Heizungen und welche Schemata gibt es?',
+    'Welche Seriennummern sind dokumentiert?',
+    'Welche Avery-Komponenten sind aufgeführt?',
   ],
 }
 
-function buildSuggestions(m: CustomerOverview['machines'][number]): string[] {
-  const slug = (m.slug || '').toLowerCase()
-  const folder = (m.folder || '').toLowerCase()
-  const all = `${slug} ${folder}`
-
-  // Match known-good buckets
+function buildSuggestions(machine: Machine): string[] {
+  const identity = `${machine.slug} ${machine.folder}`.toLowerCase()
   let knownKey: string | null = null
-  if (all.includes('smb')) knownKey = 'smb'
-  else if (all.includes('netjet 1') || all.includes('netjet-1')) knownKey = 'netjet1'
-  else if (all.includes('netjet 2') || all.includes('netjet-2')) knownKey = 'netjet2'
-  else if (all.includes('cmc') || all.includes('folieneinschlag')) knownKey = 'cmc'
-  else if (all.includes('inkjet') && all.includes('bx')) knownKey = 'inkjet_bx'
+  if (identity.includes('smb')) knownKey = 'smb'
+  else if (identity.includes('netjet 1') || identity.includes('netjet-1')) knownKey = 'netjet1'
+  else if (identity.includes('netjet 2') || identity.includes('netjet-2')) knownKey = 'netjet2'
+  else if (identity.includes('cmc') || identity.includes('folieneinschlag')) knownKey = 'cmc'
 
   const known = knownKey ? KNOWN_GOOD[knownKey] || [] : []
-
-  // Generic — derive from real doc names so it always works
-  const docs = (m.sample_docs || []).filter(
-    (d) => d.name && !/^[\d_-]+\.(pdf|PDF)$/.test(d.name),
-  )
-  const generic: string[] = []
-  for (const d of docs.slice(0, 4)) {
-    const cleanName = d.name
-      .replace(/\.(pdf|PDF|txt|TXT|jpg|JPG|bmp|BMP)$/i, '')
-      .replace(/_/g, ' ')
-      .slice(0, 80)
-    generic.push(`Was beschreibt „${cleanName}"?`)
-  }
-
-  // Combine: known-good first, then generic from real doc names, dedup, cap at 6
-  const seen = new Set<string>()
-  const merged: string[] = []
-  for (const q of [...known, ...generic]) {
-    const key = q.toLowerCase().slice(0, 50)
-    if (seen.has(key)) continue
-    seen.add(key)
-    merged.push(q)
-    if (merged.length >= 6) break
-  }
+  const generic = (machine.sample_docs || [])
+    .filter((doc) => doc.name)
+    .slice(0, 4)
+    .map((doc) => `Was beschreibt „${doc.name.replace(/\.(pdf|txt|jpg|bmp)$/i, '').replace(/_/g, ' ').slice(0, 70)}“?`)
+  const merged = Array.from(new Set([...known, ...generic]))
   if (merged.length === 0) {
-    if ((m.pdfs ?? 0) > 0) merged.push('Welche Themen behandelt die Dokumentation?')
-    if ((m.imgs ?? 0) > 0) merged.push('Was zeigen die Bilder?')
-    if ((m.txts ?? 0) > 0) merged.push('Welche Konfigurationen sind hinterlegt?')
+    merged.push(
+      'Welche Themen behandelt die Dokumentation?',
+      'Welche Wartungsschritte sind beschrieben?',
+      'Welche Ersatzteile sind dokumentiert?',
+    )
   }
-  return merged
+  return merged.slice(0, 4)
 }
 
 function formatDateShort(value: string | null | undefined): string {
   if (!value) return ''
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleString('de-CH', {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('de-CH', {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
@@ -1098,95 +990,86 @@ function formatDateShort(value: string | null | undefined): string {
   })
 }
 
-function firstNonEmpty(s: string): string {
-  for (const line of s.split('\n')) {
-    const t = line.replace(/^#+\s*/, '').replace(/\*\*/g, '').trim()
-    if (t && t.length > 3 && !t.startsWith('##')) return t.slice(0, 100)
+function firstNonEmpty(value: string): string {
+  for (const line of value.split('\n')) {
+    const text = line.replace(/^#+\s*/, '').replace(/\*\*/g, '').trim()
+    if (text.length > 3 && !text.startsWith('##')) return text.slice(0, 100)
   }
   return ''
 }
 
-function escHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-function highlightSnippet(text: string, query: string, len: number): string {
+function highlightSnippet(text: string, query: string, length: number): string {
   if (!text) return ''
   const terms = query
     .split(/\s+/)
-    .filter((t) => t.length >= 3 && !/^(co|the|and|gdzie|jak|pokazuje|jest|sa|dla)$/i.test(t))
-    .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .filter((term) => term.length >= 3)
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   let snippet = text.replace(/\n+/g, ' ').trim()
-  if (terms.length) {
-    const re = new RegExp(`(${terms.join('|')})`, 'i')
-    const m = snippet.match(re)
-    if (m && m.index !== undefined) {
-      const start = Math.max(0, m.index - 40)
-      snippet = (start > 0 ? '…' : '') + snippet.slice(start, start + len + 40)
+  if (terms.length > 0) {
+    const expression = new RegExp(`(${terms.join('|')})`, 'i')
+    const match = snippet.match(expression)
+    if (match?.index !== undefined) {
+      const start = Math.max(0, match.index - 40)
+      snippet = (start > 0 ? '…' : '') + snippet.slice(start, start + length + 40)
     } else {
-      snippet = snippet.slice(0, len)
+      snippet = snippet.slice(0, length)
     }
-    const hlRe = new RegExp(`(${terms.join('|')})`, 'gi')
-    return escHtml(snippet).replace(hlRe, '<mark>$1</mark>')
+    return escapeHtml(snippet).replace(new RegExp(`(${terms.join('|')})`, 'gi'), '<mark>$1</mark>')
   }
-  return escHtml(snippet.slice(0, len))
+  return escapeHtml(snippet.slice(0, length))
 }
 
-function formatAnswer(a: string): string {
-  const esc = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
-  const lines = a.split('\n')
-  const out: string[] = []
+function formatAnswer(answer: string): string {
+  const lines = answer.split('\n')
+  const output: string[] = []
   let inList: 'ul' | 'ol' | null = null
   const closeList = () => {
-    if (inList) {
-      out.push(`</${inList}>`)
-      inList = null
-    }
+    if (inList) output.push(`</${inList}>`)
+    inList = null
   }
 
   for (const raw of lines) {
     const line = raw.trimEnd()
-    const ulMatch = line.match(/^\s*[-*]\s+(.+)$/)
-    const olMatch = line.match(/^\s*(\d+)\.\s+(.+)$/)
-    const hMatch = line.match(/^(#{1,6})\s+(.+)$/)
-
-    if (ulMatch) {
+    const unordered = line.match(/^\s*[-*]\s+(.+)$/)
+    const ordered = line.match(/^\s*\d+\.\s+(.+)$/)
+    const heading = line.match(/^(#{1,6})\s+(.+)$/)
+    if (unordered) {
       if (inList !== 'ul') {
         closeList()
-        out.push('<ul>')
+        output.push('<ul>')
         inList = 'ul'
       }
-      out.push(`<li>${renderInline(ulMatch[1], esc)}</li>`)
-    } else if (olMatch) {
+      output.push(`<li>${renderInline(unordered[1])}</li>`)
+    } else if (ordered) {
       if (inList !== 'ol') {
         closeList()
-        out.push('<ol>')
+        output.push('<ol>')
         inList = 'ol'
       }
-      out.push(`<li>${renderInline(olMatch[2], esc)}</li>`)
-    } else if (hMatch) {
+      output.push(`<li>${renderInline(ordered[1])}</li>`)
+    } else if (heading) {
       closeList()
-      const level = Math.min(hMatch[1].length + 2, 6)
-      out.push(`<h${level}>${renderInline(hMatch[2], esc)}</h${level}>`)
-    } else if (line.trim() === '') {
+      const level = Math.min(heading[1].length + 2, 6)
+      output.push(`<h${level}>${renderInline(heading[2])}</h${level}>`)
+    } else if (!line.trim()) {
       closeList()
-      out.push('')
     } else {
       closeList()
-      out.push(`<p>${renderInline(line, esc)}</p>`)
+      output.push(`<p>${renderInline(line)}</p>`)
     }
   }
   closeList()
-  return out.join('\n')
+  return output.join('\n')
 }
 
-function renderInline(s: string, esc: (x: string) => string): string {
-  let t = esc(s)
-  t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  t = t.replace(/(^|[\s(])\*([^*\n]+?)\*(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>')
-  t = t.replace(/`([^`]+)`/g, '<code>$1</code>')
-  t = t.replace(/\[(\d+)\]/g, '<sup class="cite-ref">[$1]</sup>')
-  return t
+function renderInline(value: string): string {
+  return escapeHtml(value)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\n]+?)\*(?=[\s.,;:!?)]|$)/g, '$1<em>$2</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[(\d+)\]/g, '<sup class="cite-ref">[$1]</sup>')
 }

@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../hooks/useAuth'
 import { LanguageToggle } from '../components/LanguageToggle'
@@ -6,30 +6,25 @@ import { LanguageToggle } from '../components/LanguageToggle'
 export function AppLayout() {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
+  const location = useLocation()
+  const isProto = location.pathname === '/proto'
 
   return (
-    <div className="app">
+    <div className={`app ${isProto ? 'app-proto' : ''}`}>
       <header className="topbar">
-        <a href="/einsatzplaner/" className="topbar-brand">
-          <span className="topbar-title">{t('app.title')}</span>
-          <span className="topbar-badge">
-            {import.meta.env.VITE_PROTO_ONLY === '1' ? 'Wissensdatenbank' : 'Mission Control'}
+        <Link to="/proto" className="topbar-brand">
+          <span className="topbar-logo" aria-hidden="true">M</span>
+          <span>
+            <span className="topbar-title">MachineGKI</span>
+            <span className="topbar-kicker">Operative Knowledge</span>
           </span>
-        </a>
-        <nav className="topbar-nav">
-          {import.meta.env.VITE_PROTO_ONLY === '1' ? (
-            <a href="/einsatzplaner/proto" className="topbar-nav-link">Wissensdatenbank</a>
-          ) : (
-            <>
-              <a href="/einsatzplaner/" className="topbar-nav-link">{t('search.machines')}</a>
-              <a href="/einsatzplaner/fleet" className="topbar-nav-link">{t('fleet.title')}</a>
-              <a href="/einsatzplaner/proto" className="topbar-nav-link">Proto KB</a>
-            </>
-          )}
-        </nav>
+        </Link>
         <div className="topbar-right">
           {user?.role === 'superadmin' && (
-            <a href="/einsatzplaner/admin/users" className="topbar-nav-link">Users</a>
+            <>
+              <Link to="/fleet" className="topbar-nav-link">Fleet</Link>
+              <Link to="/admin/users" className="topbar-nav-link">Users</Link>
+            </>
           )}
           <LanguageToggle />
           {user && (
@@ -42,7 +37,7 @@ export function AppLayout() {
           )}
         </div>
       </header>
-      <main className="main-content">
+      <main className={`main-content ${isProto ? 'main-content-proto' : ''}`}>
         <Outlet />
       </main>
     </div>
