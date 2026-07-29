@@ -23,6 +23,8 @@ class FakeGraph:
         value = self.json.get(path)
         if value is None:
             raise AssertionError(f"Unexpected JSON request: {path}")
+        if isinstance(value, Exception):
+            raise value
         return value
 
     def request_bytes(self, path):
@@ -182,6 +184,69 @@ class SharePointProtoSyncTests(unittest.TestCase):
             self.assertEqual(state.include_paths, ["Included"])
             self.assertTrue((Path(tmp) / "Included/Machine A/a.pdf").exists())
             self.assertFalse((Path(tmp) / "Other/Machine B/b.pdf").exists())
+
+    def test_mirror_delta_recovers_expired_token_before_removing_stale_files(self):
+        graph = FakeGraph()
+        graph.json["https://delta.example/expired"] = sync.DeltaResyncRequired(
+            "410 Gone: resyncRequired"
+        )
+        graph.json["/drives/drive/root/delta"] = {
+            "value": [
+                {
+                    "id": "kept",
+                    "name": "kept.pdf",
+                    "file": {"mimeType": "application/pdf"},
+                    "size": 3,
+                    "eTag": "v2",
+                    "parentReference": {"path": "/drives/drive/root:/Machine A"},
+                },
+            ],
+            "@odata.deltaLink": "https://delta.example/fresh",
+        }
+        graph.bytes["/drives/drive/items/kept/content"] = b"new"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            kept = root / "Machine A/kept.pdf"
+            stale = root / "Machine A/stale.pdf"
+            kept.parent.mkdir(parents=True)
+            kept.write_bytes(b"old")
+            stale.write_bytes(b"stale")
+            state = sync.SyncState(
+                delta_link="https://delta.example/expired",
+                drive_id="drive",
+                root_path="",
+                items={
+                    "kept": {
+                        "rel_path": "Machine A/kept.pdf",
+                        "size": 3,
+                        "eTag": "v1",
+                    },
+                    "stale": {
+                        "rel_path": "Machine A/stale.pdf",
+                        "size": 5,
+                        "eTag": "v1",
+                    },
+                },
+            )
+
+            counts = sync.mirror_delta(
+                graph,
+                "drive",
+                None,
+                "",
+                state,
+                root,
+                {".pdf"},
+                full=False,
+            )
+
+            self.assertEqual(counts["downloaded"], 1)
+            self.assertEqual(counts["deleted"], 1)
+            self.assertEqual(kept.read_bytes(), b"new")
+            self.assertFalse(stale.exists())
+            self.assertEqual(state.delta_link, "https://delta.example/fresh")
+            self.assertEqual(set(state.items), {"kept"})
 
     def test_ingest_log_path_uses_durable_log_dir_and_safe_names(self):
         original = {

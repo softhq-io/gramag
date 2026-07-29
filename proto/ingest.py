@@ -21,6 +21,11 @@ from db_helpers import result_value
 from embeddings import generate_embedding, generate_embeddings_batch
 from proto import PROTO_CACHE_DIR, PROTO_MANIFEST_PATH, SAMPLE_MACHINES
 from proto.db_proto import proto_db
+from proto.ingest_safety import (
+    assert_protected_customer_baseline,
+    parse_protected_baseline,
+    verify_pre_import,
+)
 from proto.vision import (
     summarize_config,
     vision_caption_image,
@@ -1056,11 +1061,26 @@ def main():
     ap.add_argument("--import-output-dir", type=Path, default=None, help="Import staged JSONL records into FalkorDB as a single writer")
     ap.add_argument("--import-checkpoint", type=Path, default=None, help="Checkpoint path for staged JSONL import")
     ap.add_argument("--import-sleep", type=float, default=0.0, help="Seconds to sleep after each imported staged record")
+    ap.add_argument(
+        "--protected-baseline-json",
+        default=os.getenv("PROTO_PROTECTED_BASELINE_JSON"),
+        help="JSON counts for a customer that must remain unchanged across staged import",
+    )
     args = ap.parse_args()
 
     if args.import_output_dir:
+        protected_baseline = parse_protected_baseline(args.protected_baseline_json)
+        if protected_baseline:
+            verify_pre_import(args.import_output_dir, protected_baseline)
         checkpoint = args.import_checkpoint or (args.import_output_dir / "import_checkpoint.json")
         import_staged_records(args.import_output_dir, checkpoint, sleep_seconds=args.import_sleep)
+        if protected_baseline:
+            assert_protected_customer_baseline(protected_baseline)
+            print(
+                f"Protected customer baseline unchanged: "
+                f"{protected_baseline['customer']}",
+                flush=True,
+            )
         print("\nDone.")
         print("Stats:")
         for label, count in proto_db.stats()["nodes"].items():

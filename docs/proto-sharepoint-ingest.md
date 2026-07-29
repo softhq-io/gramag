@@ -339,8 +339,37 @@ inputs:
 
 The workflow expands these into Container App Job names like
 `staging-sp-proto-clients-a01-pdf` through
-`staging-sp-proto-clients-a16-pdf`. It does not snapshot automatically; keep the
-safe phase sequence above.
+`staging-sp-proto-clients-a16-pdf`. Import phases call the staging backup
+workflow first and will not start unless `BGSAVE`, persistence verification,
+and both Azure File snapshots succeed. Post-import verification and snapshots
+remain required.
+
+## Digitec And Galledia Batch
+
+The prepared staging batch keeps the two customers independent:
+
+- Digitec Galaxus AG: prefix `dgx`, four PDF/text and four image shards.
+- Galledia Print AG: prefix `gal`, four PDF/text and four image shards.
+
+Use the standard `batch-*` phases with `batch_count=4`. Complete one customer
+through PDF/text import and verification before starting the other customer.
+Image import remains a later phase after PDF/text completion.
+
+The import jobs set `PROTO_PROTECTED_BASELINE_JSON` for the completed
+`Birkhäuser + GBC AG` dataset. Before importing, `proto.ingest` must:
+
+- match the protected customer's machine/document/category/payload counts,
+- reject any staged protected-customer records,
+- reject machine, document, section, config, or image IDs owned by a different
+  existing graph entity.
+
+The protected baseline is checked again after the import. Any mismatch makes
+the job fail without writing a completion marker.
+
+Saved Microsoft Graph delta tokens can expire with HTTP `410 resyncRequired`.
+The sync client must rebuild state from a full server inventory and only remove
+stale mirror files after that inventory completes. A failed resync must leave
+the previous saved state and mirror intact.
 
 ## Failure Rules
 

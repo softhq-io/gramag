@@ -39,6 +39,10 @@ DEFAULT_EXTENSIONS = {
 }
 
 
+class DeltaResyncRequired(RuntimeError):
+    """Raised when Microsoft Graph invalidates a saved delta token."""
+
+
 def env(name: str, default: str | None = None) -> str | None:
     value = os.getenv(name)
     return value if value not in (None, "") else default
@@ -178,7 +182,12 @@ class GraphClient:
                     delay = int(retry_after or min(60, 2 ** attempt))
                     time.sleep(delay)
                     continue
-                raise RuntimeError(f"Graph request failed for {url}: {decode_error(err)}") from err
+                details = decode_error(err)
+                if err.code == 410 and "resyncRequired" in details:
+                    raise DeltaResyncRequired(
+                        f"Graph delta token expired for {url}: {details}"
+                    ) from err
+                raise RuntimeError(f"Graph request failed for {url}: {details}") from err
         raise RuntimeError(f"Graph request failed for {url}")
 
 
@@ -450,7 +459,43 @@ def mirror_delta(
 
     counts = {"seen": 0, "downloaded": 0, "deleted": 0, "skipped": 0}
     while next_url:
-        payload = client.request_json(next_url)
+        try:
+            payload = client.request_json(next_url)
+        except DeltaResyncRequired:
+            if full or not state.delta_link:
+                raise
+
+            previous_items = dict(state.items)
+            print(
+                "SharePoint delta token expired; rebuilding state from a full "
+                "server inventory before reconciling removed files.",
+                flush=True,
+            )
+            counts = mirror_delta(
+                client,
+                drive_id,
+                root_item_id,
+                root_path,
+                state,
+                source_root,
+                allowed_extensions,
+                full=True,
+                max_downloads=max_downloads,
+                include_paths=include_paths,
+            )
+
+            # Delete stale mirror files only after the full inventory completed.
+            # If the resync fails, the caller does not save the partial state and
+            # the existing mirror remains intact.
+            for item_id, previous in previous_items.items():
+                if item_id in state.items or not previous.get("rel_path"):
+                    continue
+                target = safe_target(source_root, previous["rel_path"])
+                if target.is_file():
+                    target.unlink()
+                    counts["deleted"] += 1
+            return counts
+
         for item in payload.get("value", []):
             counts["seen"] += 1
             item_id = item.get("id")

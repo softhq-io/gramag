@@ -37,7 +37,17 @@ permissions:
   contents: read
 
 jobs:
+  pre-import-snapshot:
+    if: contains(inputs.phase, 'import')
+    uses: ./.github/workflows/backup-staging-data.yml
+    secrets: inherit
+
   start:
+    needs: pre-import-snapshot
+    if: >-
+      always() &&
+      (needs.pre-import-snapshot.result == 'success' ||
+       needs.pre-import-snapshot.result == 'skipped')
     runs-on: ubuntu-latest
 
     steps:
