@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../hooks/useAuth'
 import { ApiError } from '../api/client'
+import { LanguageToggle } from '../components/LanguageToggle'
 
 export function LoginPage() {
   const { t } = useTranslation()
@@ -64,49 +65,113 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
-      <form className="login-form" onSubmit={handleSubmit}>
-        <h1 className="login-title">{t('app.title')}</h1>
-        <p className="login-subtitle">{t('app.subtitle')}</p>
-        {error && <div className="login-error">{error}</div>}
-        {cooldownSeconds > 0 && (
-          <div className="login-error">
-            {t('auth.loginCooldown', { count: cooldownMinutes })}
-          </div>
-        )}
-        {passwordChangeToken ? (
-          <>
-            <p className="login-subtitle">{t('auth.changePasswordRequired')}</p>
-            <input type="password" placeholder={t('auth.newPassword')} value={newPassword}
-              onChange={e => setNewPassword(e.target.value)} autoFocus minLength={12} required />
-            <input type="password" placeholder={t('auth.confirmPassword')} value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)} minLength={12} required />
-          </>
-        ) : (
-          <>
-            <input type="text" name="username" autoComplete="username"
-              placeholder={t('auth.username')} value={email}
-              onChange={e => {
-                setEmail(e.target.value)
-                setCooldownSeconds(0)
-                setError('')
-              }} autoFocus required />
-            <input type="password" name="password" autoComplete="current-password"
-              placeholder={t('auth.password')} value={password}
-              onChange={e => setPassword(e.target.value)} required />
-          </>
-        )}
-        <button type="submit" disabled={loading || cooldownSeconds > 0}>
-          {loading ? (
-            <span className="btn-content">
-              <span className="btn-spinner" />
-              {t('auth.logging_in')}
-            </span>
-          ) : passwordChangeToken ? t('auth.setPassword') : t('auth.login')}
-        </button>
-        <div className="login-footer">
-          <p className="login-powered">{t('app.poweredBy')}</p>
+      <div className="login-language">
+        <LanguageToggle />
+      </div>
+      <main className="login-shell">
+        <div className="login-brand" aria-label="MachineGKI">
+          <span className="login-brand-mark" aria-hidden="true">M</span>
+          <span>
+            <strong>MachineGKI</strong>
+            <small>{t('app.operationalKnowledge')}</small>
+          </span>
         </div>
-      </form>
+
+        <header className="login-intro">
+          <span className="login-eyebrow">
+            <span className="login-status-dot" aria-hidden="true" />
+            {t('auth.secureAccess')}
+          </span>
+          <h1>{passwordChangeToken ? t('auth.setPassword') : t('auth.welcome')}</h1>
+          <p>
+            {passwordChangeToken ? t('auth.changePasswordRequired') : t('auth.loginHint')}
+          </p>
+        </header>
+
+        <form className="login-form" onSubmit={handleSubmit} aria-label={t('auth.login')}>
+          {error && <div className="login-error">{error}</div>}
+          {cooldownSeconds > 0 && (
+            <div className="login-error">
+              {t('auth.loginCooldown', { count: cooldownMinutes })}
+            </div>
+          )}
+          <div className="login-fields">
+            {passwordChangeToken ? (
+              <>
+                <label className="login-field">
+                  <span>{t('auth.newPassword')}</span>
+                  <span className="login-control">
+                    <LockIcon />
+                    <input type="password" placeholder={t('auth.newPassword')} value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)} autoFocus minLength={12} required />
+                  </span>
+                </label>
+                <label className="login-field">
+                  <span>{t('auth.confirmPassword')}</span>
+                  <span className="login-control">
+                    <LockIcon />
+                    <input type="password" placeholder={t('auth.confirmPassword')} value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)} minLength={12} required />
+                  </span>
+                </label>
+              </>
+            ) : (
+              <>
+                <label className="login-field">
+                  <span>{t('auth.username')}</span>
+                  <span className="login-control">
+                    <UserIcon />
+                    <input type="text" name="username" autoComplete="username"
+                      placeholder={t('auth.username')} value={email}
+                      onChange={e => {
+                        setEmail(e.target.value)
+                        setCooldownSeconds(0)
+                        setError('')
+                      }} autoFocus required />
+                  </span>
+                </label>
+                <label className="login-field">
+                  <span>{t('auth.password')}</span>
+                  <span className="login-control">
+                    <LockIcon />
+                    <input type="password" name="password" autoComplete="current-password"
+                      placeholder={t('auth.password')} value={password}
+                      onChange={e => setPassword(e.target.value)} required />
+                  </span>
+                </label>
+              </>
+            )}
+          </div>
+          <button className="login-submit" type="submit" disabled={loading || cooldownSeconds > 0}>
+            {loading ? (
+              <span className="btn-content">
+                <span className="btn-spinner" />
+                {t('auth.logging_in')}
+              </span>
+            ) : (
+              <span className="btn-content">
+                {passwordChangeToken ? t('auth.setPassword') : t('auth.login')}
+                <ArrowIcon />
+              </span>
+            )}
+          </button>
+          <footer className="login-footer">
+            <p className="login-powered">{t('app.poweredBy')}</p>
+          </footer>
+        </form>
+      </main>
     </div>
   )
+}
+
+function UserIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>
+}
+
+function LockIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+}
+
+function ArrowIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
 }

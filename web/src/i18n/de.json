@@ -2,12 +2,16 @@
   "app": {
     "title": "Gramag Einsatzplaner",
     "subtitle": "Service Mission Control",
-    "poweredBy": "Powered by Knowledge Graph + AI"
+    "poweredBy": "Powered by Knowledge Graph + AI",
+    "operationalKnowledge": "Operative Wissensdatenbank"
   },
   "auth": {
     "login": "Anmelden",
     "logging_in": "Anmelden...",
     "logout": "Abmelden",
+    "welcome": "Willkommen bei MachineGKI",
+    "loginHint": "Melden Sie sich an, um Kunde und Maschine für Ihren Einsatz auszuwählen.",
+    "secureAccess": "Sicherer Zugriff",
     "username": "E-Mail oder Benutzername",
     "email": "E-Mail",
     "password": "Passwort",
