@@ -3739,7 +3739,7 @@ body {
   min-height: 52px;
   margin: 0 auto;
   padding: 5px 5px 5px 14px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 5px;
   border: 1px solid #2a394b;
@@ -3767,6 +3767,44 @@ body {
 
 .proto-composer-wrap .proto-chat-composer textarea:focus {
   border: 0;
+}
+
+.proto-composer-wrap .proto-dictate {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  place-items: center;
+  align-self: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--proto-muted);
+  cursor: pointer;
+  line-height: 0;
+}
+
+.proto-composer-wrap .proto-dictate:hover {
+  border-color: var(--proto-border);
+  background: var(--proto-panel);
+  color: var(--proto-text);
+}
+
+.proto-composer-wrap .proto-dictate.active {
+  border-color: rgba(255, 107, 97, 0.55);
+  background: rgba(255, 107, 97, 0.12);
+  color: #ff7b72;
+}
+
+.proto-composer-wrap .proto-dictate svg {
+  display: block;
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .proto-composer-wrap .proto-send {
@@ -3799,6 +3837,41 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
+}
+
+.proto-dictation-status {
+  display: flex;
+  width: min(100%, 780px);
+  margin: 5px auto 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--proto-muted);
+  font-size: 9px;
+  text-align: center;
+}
+
+.proto-dictation-status.active {
+  color: var(--proto-cyan);
+}
+
+.proto-dictation-status.error {
+  color: #ff9b95;
+}
+
+.proto-dictation-status span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: proto-dictation-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes proto-dictation-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
 }
 
 .proto-composer-wrap > p {
@@ -3927,6 +4000,12 @@ body {
 }
 
 @media (max-width: 620px) {
+  .proto-composer-wrap .proto-dictate,
+  .proto-composer-wrap .proto-send {
+    width: 42px;
+    height: 42px;
+  }
+
   .app-proto .topbar-user {
     display: none;
   }

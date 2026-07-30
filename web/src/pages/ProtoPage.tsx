@@ -14,9 +14,42 @@ import type {
   ProtoHit,
 } from '../api/proto'
 import { useAuth } from '../hooks/useAuth'
+import { useTranslation } from 'react-i18next'
 
 type ProtoSectionDetail = Awaited<ReturnType<typeof getProtoSection>>
 type Machine = CustomerOverview['machines'][number]
+type SpeechRecognitionResultLike = {
+  isFinal: boolean
+  0: { transcript: string }
+}
+type SpeechRecognitionEventLike = {
+  results: {
+    length: number
+    [index: number]: SpeechRecognitionResultLike
+  }
+}
+type SpeechRecognitionErrorLike = { error: string }
+type SpeechRecognitionLike = {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null
+  onerror: ((event: SpeechRecognitionErrorLike) => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
+
+function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
+  if (typeof window === 'undefined') return null
+  const speechWindow = window as typeof window & {
+    SpeechRecognition?: SpeechRecognitionConstructor
+    webkitSpeechRecognition?: SpeechRecognitionConstructor
+  }
+  return speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition || null
+}
 
 export function ProtoPage() {
   const { user } = useAuth()
@@ -581,13 +614,28 @@ function ChatWorkspace({
   setSectionDetail: (section: ProtoSectionDetail | null) => void
   setLightbox: (url: string | null) => void
 }) {
+  const { i18n } = useTranslation()
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [speechSupported, setSpeechSupported] = useState(false)
+  const [dictating, setDictating] = useState(false)
+  const [dictationStatus, setDictationStatus] = useState('')
   const threadEndRef = useRef<HTMLDivElement | null>(null)
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const dictationBaseRef = useRef('')
+  const recognitionErrorRef = useRef(false)
   const suggestions = buildSuggestions(machine).slice(0, 4)
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [loading, messages])
+
+  useEffect(() => {
+    setSpeechSupported(Boolean(getSpeechRecognitionConstructor()))
+    return () => {
+      recognitionRef.current?.abort()
+      recognitionRef.current = null
+    }
+  }, [])
 
   const selectedAssistant =
     messages.find((message) => message.id === selectedAssistantId && message.role === 'assistant') ||
@@ -606,8 +654,80 @@ function ChatWorkspace({
   }
 
   function beginNewChat() {
+    stopDictation()
     onNewChat()
     setHistoryOpen(false)
+  }
+
+  function stopDictation() {
+    recognitionRef.current?.stop()
+    recognitionRef.current = null
+    setDictating(false)
+  }
+
+  function toggleDictation() {
+    if (dictating) {
+      stopDictation()
+      setDictationStatus('')
+      return
+    }
+
+    const SpeechRecognition = getSpeechRecognitionConstructor()
+    if (!SpeechRecognition) return
+
+    const recognition = new SpeechRecognition()
+    recognitionRef.current = recognition
+    recognitionErrorRef.current = false
+    dictationBaseRef.current = query.trimEnd()
+    recognition.lang = i18n.language.toLowerCase().startsWith('en') ? 'en-US' : 'de-DE'
+    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.onresult = (event) => {
+      let finalTranscript = ''
+      let interimTranscript = ''
+      for (let index = 0; index < event.results.length; index += 1) {
+        const result = event.results[index]
+        const transcript = result[0]?.transcript || ''
+        if (result.isFinal) finalTranscript += transcript
+        else interimTranscript += transcript
+      }
+      const spokenText = `${finalTranscript} ${interimTranscript}`.trim()
+      const baseText = dictationBaseRef.current
+      setQuery(baseText && spokenText ? `${baseText} ${spokenText}` : baseText || spokenText)
+    }
+    recognition.onerror = (event) => {
+      recognitionErrorRef.current = true
+      const message = event.error === 'not-allowed' || event.error === 'service-not-allowed'
+        ? 'Mikrofonzugriff wurde nicht erlaubt.'
+        : event.error === 'audio-capture'
+          ? 'Kein Mikrofon verfügbar.'
+          : event.error === 'no-speech'
+            ? 'Keine Sprache erkannt. Bitte erneut versuchen.'
+            : 'Spracherkennung ist gerade nicht verfügbar.'
+      setDictationStatus(message)
+      setDictating(false)
+      recognitionRef.current = null
+    }
+    recognition.onend = () => {
+      setDictating(false)
+      recognitionRef.current = null
+      if (!recognitionErrorRef.current) setDictationStatus('')
+    }
+
+    try {
+      recognition.start()
+      setDictating(true)
+      setDictationStatus('Hört zu …')
+    } catch {
+      recognitionRef.current = null
+      setDictating(false)
+      setDictationStatus('Spracherkennung konnte nicht gestartet werden.')
+    }
+  }
+
+  function submitMessage() {
+    stopDictation()
+    onAsk()
   }
 
   return (
@@ -818,22 +938,40 @@ function ChatWorkspace({
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey && !loading && query.trim()) {
                   event.preventDefault()
-                  onAsk()
+                  submitMessage()
                 }
               }}
               placeholder="Fragen Sie MachineGKI …"
               rows={1}
             />
+            {speechSupported && (
+              <button
+                type="button"
+                className={`proto-dictate ${dictating ? 'active' : ''}`}
+                onClick={toggleDictation}
+                aria-label={dictating ? 'Diktat beenden' : 'Nachricht diktieren'}
+                aria-pressed={dictating}
+                title={dictating ? 'Diktat beenden' : 'Nachricht diktieren'}
+              >
+                {dictating ? <StopIcon /> : <MicrophoneIcon />}
+              </button>
+            )}
             <button
               type="button"
               className="proto-send"
-              onClick={() => onAsk()}
+              onClick={submitMessage}
               disabled={loading || !query.trim()}
               aria-label="Nachricht senden"
             >
               <SendIcon />
             </button>
           </div>
+          {dictationStatus && (
+            <div className={`proto-dictation-status ${dictating ? 'active' : 'error'}`} aria-live="polite">
+              {dictating && <span />}
+              {dictationStatus}
+            </div>
+          )}
           <p>
             Antworten können Ungenauigkeiten enthalten. Erkenntnisse werden automatisch in Ihrer Wissensbasis gespeichert.
           </p>
@@ -945,6 +1083,14 @@ function MenuIcon() {
 
 function SendIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4zM22 2 11 13" /></svg>
+}
+
+function MicrophoneIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" /></svg>
+}
+
+function StopIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1" /></svg>
 }
 
 function SearchIcon() {
