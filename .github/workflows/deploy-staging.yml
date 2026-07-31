@@ -295,18 +295,33 @@ jobs:
           curl --max-time 30 -fsS \
             "https://staging-gramag-app.politemushroom-9223672b.westeurope.azurecontainerapps.io/health" \
             >/dev/null || true
-          for attempt in {1..5}; do
+          durable_logs_found=false
+          durable_log_attempts=5
+          if [[ "$status" == "Failed" || "$status" == "Stopped" ]]; then
+            durable_log_attempts=1
+          fi
+          for attempt in $(seq 1 "$durable_log_attempts"); do
             if script -q -e -c \
               "az containerapp exec --resource-group gramag-staging-rg --name staging-gramag-app --container gramag-app --command 'find $log_dir -maxdepth 2 -type f -exec tail -n 200 {} +'" \
               /dev/null; then
+              durable_logs_found=true
               break
             fi
-            if [ "$attempt" = "5" ]; then
+            if [ "$attempt" = "$durable_log_attempts" ]; then
               echo "Could not read durable logs: $log_dir"
-              exit 1
+              break
             fi
             sleep 10
           done
+          if [ "$durable_logs_found" != "true" ]; then
+            echo "Falling back to Container Apps execution logs"
+            az containerapp job logs show \
+              --name "$JOB_NAME" \
+              --resource-group gramag-staging-rg \
+              --execution "$EXECUTION_NAME" \
+              --container sharepoint-proto-ingest \
+              --tail 200 || true
+          fi
 
           if [[ "$JOB_NAME" == *-import-* ]]; then
             echo "Import checkpoint progress:"
