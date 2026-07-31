@@ -308,6 +308,13 @@ jobs:
             sleep 10
           done
 
+          if [[ "$JOB_NAME" == *-import-* ]]; then
+            echo "Import checkpoint progress:"
+            script -q -e -c \
+              "az containerapp exec --resource-group gramag-staging-rg --name staging-gramag-app --container gramag-app --command 'find /data/proto-ready -maxdepth 2 -name import_checkpoint.json -exec grep -Hc ts {} +'" \
+              /dev/null || true
+          fi
+
           case "$status" in
             Succeeded) exit 0 ;;
             Failed|Stopped) exit 1 ;;
