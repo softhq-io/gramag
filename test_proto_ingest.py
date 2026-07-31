@@ -473,6 +473,35 @@ class ProtoIngestTests(unittest.TestCase):
         self.assertTrue(db._is_retryable_error(RuntimeError("Connection closed by server")))
         self.assertFalse(db._is_retryable_error(RuntimeError("syntax error")))
 
+    def test_proto_db_sanitizes_unsupported_parameter_controls(self):
+        captured = {}
+
+        class FakeGraph:
+            def query(self, cypher, params=None):
+                captured["cypher"] = cypher
+                captured["params"] = params
+                return "ok"
+
+        embedding = [0.1, 0.2]
+        db = ProtoGraphConnection()
+        db.graph = FakeGraph()
+        result = db.query(
+            "RETURN $text",
+            {
+                "text": "before\x00middle\x01after\n",
+                "ids": ["clean", "bad\x7f"],
+                "embedding": embedding,
+            },
+        )
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(
+            captured["params"]["text"],
+            "before\ufffdmiddle\ufffdafter\n",
+        )
+        self.assertEqual(captured["params"]["ids"], ["clean", "bad\ufffd"])
+        self.assertIs(captured["params"]["embedding"], embedding)
+
     def test_proto_db_retry_resets_without_reconnect_escape(self):
         db = ProtoGraphConnection()
         attempts = []

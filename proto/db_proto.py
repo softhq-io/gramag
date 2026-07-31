@@ -12,6 +12,28 @@ from db_helpers import result_value
 from proto import PROTO_GRAPH_NAME
 
 
+_GRAPH_STRING_TRANSLATION = {
+    codepoint: "\N{REPLACEMENT CHARACTER}"
+    for codepoint in (*range(0x20), 0x7F)
+    if codepoint not in (0x09, 0x0A, 0x0D)
+}
+
+
+def sanitize_graph_parameter(value):
+    """Replace control characters FalkorDB cannot parse in query parameters."""
+    if isinstance(value, str):
+        return value.translate(_GRAPH_STRING_TRANSLATION)
+    if isinstance(value, dict):
+        return {key: sanitize_graph_parameter(item) for key, item in value.items()}
+    if isinstance(value, list):
+        if not value or all(isinstance(item, (int, float)) for item in value):
+            return value
+        return [sanitize_graph_parameter(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(sanitize_graph_parameter(item) for item in value)
+    return value
+
+
 class ProtoGraphConnection:
     def __init__(self, graph_name: str = PROTO_GRAPH_NAME):
         self.host = FALKORDB_HOST
@@ -99,7 +121,10 @@ class ProtoGraphConnection:
         raise last
 
     def query(self, cypher: str, params: dict | None = None):
-        return self._with_retry(lambda: self.connect().query(cypher, params=params))
+        safe_params = sanitize_graph_parameter(params) if params is not None else None
+        return self._with_retry(
+            lambda: self.connect().query(cypher, params=safe_params)
+        )
 
     def write(self, cypher: str, params: dict | None = None):
         return self.query(cypher, params)
