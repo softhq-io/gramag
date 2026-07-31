@@ -36,7 +36,9 @@ jobs:
     if: >-
       always() &&
       (needs.pre-import-snapshot.result == 'success' ||
-       needs.pre-import-snapshot.result == 'skipped')
+       needs.pre-import-snapshot.result == 'skipped') &&
+      (github.event_name != 'workflow_dispatch' ||
+       inputs.execution_name == '')
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-staging
@@ -248,3 +250,70 @@ jobs:
 
           echo "Timed out while monitoring $EXECUTION_NAME"
           exit 1
+
+  monitor:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.job_name != '' &&
+      inputs.execution_name != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Inspect staging Proto execution
+        env:
+          JOB_NAME: ${{ inputs.job_name }}
+          EXECUTION_NAME: ${{ inputs.execution_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$JOB_NAME" =~ ^staging-sp-proto-[a-z0-9-]+-(pdf|img)$ ]]; then
+            echo "Unsupported staging ingest job name: $JOB_NAME"
+            exit 1
+          fi
+          execution_suffix="${EXECUTION_NAME#"$JOB_NAME"-}"
+          if [ "$execution_suffix" = "$EXECUTION_NAME" ] ||
+             [[ ! "$execution_suffix" =~ ^[a-z0-9]+$ ]]; then
+            echo "Execution does not belong to job: $EXECUTION_NAME"
+            exit 1
+          fi
+
+          status="$(az containerapp job execution list \
+            --name "$JOB_NAME" \
+            --resource-group gramag-staging-rg \
+            --query "[?name=='$EXECUTION_NAME'] | [0].properties.status" \
+            --output tsv)"
+          echo "$EXECUTION_NAME status=$status"
+
+          log_path="/data/ingest-logs/$JOB_NAME/$EXECUTION_NAME.log"
+          curl --max-time 30 -fsS \
+            "https://staging-gramag-app.politemushroom-9223672b.westeurope.azurecontainerapps.io/health" \
+            >/dev/null || true
+          for attempt in {1..5}; do
+            if script -q -e -c \
+              "az containerapp exec --resource-group gramag-staging-rg --name staging-gramag-app --container gramag-app --command 'tail -n 200 $log_path'" \
+              /dev/null; then
+              break
+            fi
+            if [ "$attempt" = "5" ]; then
+              echo "Could not read durable log: $log_path"
+              exit 1
+            fi
+            sleep 10
+          done
+
+          case "$status" in
+            Succeeded) exit 0 ;;
+            Failed|Stopped) exit 1 ;;
+            Running|Processing|Pending) exit 0 ;;
+            *)
+              echo "Unknown or missing execution status: $status"
+              exit 1
+              ;;
+          esac
