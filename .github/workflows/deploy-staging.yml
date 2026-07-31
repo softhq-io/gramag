@@ -213,6 +213,15 @@ jobs:
               ;;
           esac
 
+          show_logs() {
+            az containerapp job logs show \
+              --name "$JOB_NAME" \
+              --resource-group gramag-staging-rg \
+              --execution "$EXECUTION_NAME" \
+              --container sharepoint-proto-ingest \
+              --tail 200 || true
+          }
+
           for attempt in {1..120}; do
             status="$(az containerapp job execution list \
               --name "$JOB_NAME" \
@@ -221,8 +230,14 @@ jobs:
               --output tsv)"
             echo "$EXECUTION_NAME status=$status attempt=$attempt"
             case "$status" in
-              Succeeded) exit 0 ;;
-              Failed|Stopped) exit 1 ;;
+              Succeeded)
+                show_logs
+                exit 0
+                ;;
+              Failed|Stopped)
+                show_logs
+                exit 1
+                ;;
               Running|Processing|Pending) sleep 30 ;;
               *)
                 echo "Unknown or missing execution status: $status"
