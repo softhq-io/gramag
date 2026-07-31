@@ -9,6 +9,10 @@ on:
         description: "Optional staging Container App Job to start after deployment"
         required: false
         type: string
+      execution_name:
+        description: "Optional existing execution to monitor instead of starting a job"
+        required: false
+        type: string
 
 permissions:
   id-token: write
@@ -19,7 +23,20 @@ env:
   IMAGE: gramag72fsz9.azurecr.io/gramag
 
 jobs:
+  pre-import-snapshot:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      contains(inputs.job_name, '-import-') &&
+      inputs.execution_name == ''
+    uses: ./.github/workflows/backup-staging-data.yml
+    secrets: inherit
+
   deploy:
+    needs: pre-import-snapshot
+    if: >-
+      always() &&
+      (needs.pre-import-snapshot.result == 'success' ||
+       needs.pre-import-snapshot.result == 'skipped')
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-staging
@@ -132,7 +149,10 @@ jobs:
         if: >-
           (github.event_name == 'push' &&
            contains(github.event.head_commit.message, '[run-proto-ingest]')) ||
-          (github.event_name == 'workflow_dispatch' && inputs.job_name != '')
+          (github.event_name == 'workflow_dispatch' &&
+           inputs.job_name != '' &&
+           inputs.execution_name == '')
+        id: start-ingest
         env:
           JOB_NAME: ${{ inputs.job_name }}
         run: |
@@ -158,9 +178,58 @@ jobs:
           fi
 
           for job in "${jobs[@]}"; do
-            az containerapp job start \
+            execution="$(az containerapp job start \
               --name "$job" \
               --resource-group gramag-staging-rg \
               --query name \
-              --output tsv
+              --output tsv)"
+            echo "$execution"
+            echo "execution_name=$execution" >> "$GITHUB_OUTPUT"
           done
+
+      - name: Monitor existing staging Proto execution
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.job_name != '' &&
+          inputs.execution_name != ''
+        env:
+          JOB_NAME: ${{ inputs.job_name }}
+          EXECUTION_NAME: ${{ inputs.execution_name }}
+        run: |
+          set -euo pipefail
+
+          case "$JOB_NAME" in
+            staging-sp-proto-*-pdf|staging-sp-proto-*-img) ;;
+            *)
+              echo "Unsupported staging ingest job name: $JOB_NAME"
+              exit 1
+              ;;
+          esac
+          case "$EXECUTION_NAME" in
+            "$JOB_NAME"-*) ;;
+            *)
+              echo "Execution does not belong to job: $EXECUTION_NAME"
+              exit 1
+              ;;
+          esac
+
+          for attempt in {1..120}; do
+            status="$(az containerapp job execution list \
+              --name "$JOB_NAME" \
+              --resource-group gramag-staging-rg \
+              --query "[?name=='$EXECUTION_NAME'] | [0].properties.status" \
+              --output tsv)"
+            echo "$EXECUTION_NAME status=$status attempt=$attempt"
+            case "$status" in
+              Succeeded) exit 0 ;;
+              Failed|Stopped) exit 1 ;;
+              Running|Processing|Pending) sleep 30 ;;
+              *)
+                echo "Unknown or missing execution status: $status"
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "Timed out while monitoring $EXECUTION_NAME"
+          exit 1

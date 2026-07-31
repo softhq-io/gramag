@@ -26,6 +26,7 @@ from proto.ingest_safety import (
     parse_protected_baseline,
     verify_pre_import,
 )
+from proto.source_fingerprint import source_fingerprint as _source_fingerprint
 from proto.vision import (
     summarize_config,
     vision_caption_image,
@@ -138,22 +139,6 @@ def _load_checkpoint_file(path: Path) -> dict:
 
 def _load_manifest() -> dict:
     return json.loads(Path(PROTO_MANIFEST_PATH).read_text())
-
-
-def _source_fingerprint(f: dict) -> str:
-    """Fingerprint source content enough to notice SharePoint refreshes."""
-    size = f.get("size")
-    mtime = f.get("mtime")
-    if size is None or mtime is None:
-        from proto import resolve_source
-        try:
-            stat = Path(resolve_source(f["path"])).stat()
-            size = stat.st_size
-            mtime = int(stat.st_mtime)
-        except OSError:
-            size = size or 0
-            mtime = mtime or 0
-    return f"{f.get('rel', f.get('path', ''))}|{size}|{int(mtime or 0)}"
 
 
 def _document_payload_count(doc_id: str, kind: str) -> int:
@@ -1087,6 +1072,32 @@ def main():
     ap.add_argument("--import-checkpoint", type=Path, default=None, help="Checkpoint path for staged JSONL import")
     ap.add_argument("--import-sleep", type=float, default=0.0, help="Seconds to sleep after each imported staged record")
     ap.add_argument(
+        "--import-manifest-path",
+        action="append",
+        type=Path,
+        default=[],
+        help="Current shard manifest used to reconcile staged records before import",
+    )
+    ap.add_argument(
+        "--import-require-marker",
+        action="append",
+        type=Path,
+        default=[],
+        help="Extraction completion marker required before a reconciled import",
+    )
+    ap.add_argument(
+        "--import-ready-dir",
+        type=Path,
+        default=None,
+        help="New immutable directory for manifest-reconciled staged records",
+    )
+    ap.add_argument(
+        "--import-exclude-file-name",
+        action="append",
+        default=[],
+        help="Exact source basename intentionally excluded during reconciliation",
+    )
+    ap.add_argument(
         "--exclude-file-name",
         action="append",
         default=[],
@@ -1103,11 +1114,34 @@ def main():
     args = ap.parse_args()
 
     if args.import_output_dir:
+        import_output_dir = args.import_output_dir
+        if args.import_manifest_path:
+            if not args.import_ready_dir:
+                raise RuntimeError(
+                    "--import-ready-dir is required with --import-manifest-path"
+                )
+            from proto.reconcile_stage import (
+                reconcile_staged_records,
+                verify_extraction_markers,
+            )
+
+            verify_extraction_markers(
+                args.import_require_marker,
+                args.import_manifest_path,
+            )
+            reconcile_staged_records(
+                args.import_output_dir,
+                args.import_ready_dir,
+                args.import_manifest_path,
+                kinds=args.kinds,
+                exclude_file_names=args.import_exclude_file_name,
+            )
+            import_output_dir = args.import_ready_dir
         protected_baseline = parse_protected_baseline(args.protected_baseline_json)
         if protected_baseline:
-            verify_pre_import(args.import_output_dir, protected_baseline)
-        checkpoint = args.import_checkpoint or (args.import_output_dir / "import_checkpoint.json")
-        import_staged_records(args.import_output_dir, checkpoint, sleep_seconds=args.import_sleep)
+            verify_pre_import(import_output_dir, protected_baseline)
+        checkpoint = args.import_checkpoint or (import_output_dir / "import_checkpoint.json")
+        import_staged_records(import_output_dir, checkpoint, sleep_seconds=args.import_sleep)
         if protected_baseline:
             assert_protected_customer_baseline(protected_baseline)
             print(

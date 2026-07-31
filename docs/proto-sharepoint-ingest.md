@@ -123,16 +123,21 @@ Use this sequence for a full customer ingest:
 1. Mirror SharePoint and prepare shard definitions.
 2. Run PDF/text extraction shards.
 3. Confirm all extraction shards succeeded and staged JSONL exists.
-4. Run `BGSAVE`, verify persistence, snapshot `falkordb-data` and `app-data`.
-5. Run PDF/text import.
-6. Verify graph counts and machine coverage.
-7. Run `BGSAVE`, verify persistence, snapshot both shares.
-8. Run image extraction shards.
-9. Confirm all image extraction shards succeeded and staged JSONL exists.
-10. Run `BGSAVE`, verify persistence, snapshot both shares.
-11. Run image import.
-12. Verify graph counts, machine image counts, and job success.
-13. Run final `BGSAVE`, verify persistence, snapshot both shares.
+4. Reconcile the append-only staged JSONL against every shard's current
+   manifest into a new immutable `proto-ready` directory. This removes old
+   fingerprints, source-side deletions, and explicitly approved exclusions
+   without modifying the original staged JSONL.
+5. Run `BGSAVE`, verify persistence, snapshot `falkordb-data` and `app-data`.
+6. Run PDF/text import from the reconciled directory.
+7. Verify graph counts and machine coverage.
+8. Run `BGSAVE`, verify persistence, snapshot both shares.
+9. Run image extraction shards.
+10. Confirm all image extraction shards succeeded and staged JSONL exists.
+11. Reconcile image staging into a new immutable `proto-ready` directory.
+12. Run `BGSAVE`, verify persistence, snapshot both shares.
+13. Run image import from the reconciled directory.
+14. Verify graph counts, machine image counts, and job success.
+15. Run final `BGSAVE`, verify persistence, snapshot both shares.
 
 Do not start an import phase if extraction failed. Do not start image import if
 PDF/text import did not complete cleanly.
