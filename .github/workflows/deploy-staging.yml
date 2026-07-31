@@ -4,6 +4,11 @@ on:
   push:
     branches: [staging]
   workflow_dispatch:
+    inputs:
+      job_name:
+        description: "Optional staging Container App Job to start after deployment"
+        required: false
+        type: string
 
 permissions:
   id-token: write
@@ -124,14 +129,35 @@ jobs:
           esac
 
       - name: Start staging Proto ingest
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[run-proto-ingest]')
+        if: >-
+          (github.event_name == 'push' &&
+           contains(github.event.head_commit.message, '[run-proto-ingest]')) ||
+          (github.event_name == 'workflow_dispatch' && inputs.job_name != '')
+        env:
+          JOB_NAME: ${{ inputs.job_name }}
         run: |
-          for job in \
-            staging-sp-proto-birk01-pdf \
-            staging-sp-proto-birk02-pdf \
-            staging-sp-proto-birk03-pdf \
-            staging-sp-proto-birk04-pdf
-          do
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            case "$JOB_NAME" in
+              staging-sp-proto-*-pdf|staging-sp-proto-*-img)
+                jobs=("$JOB_NAME")
+                ;;
+              *)
+                echo "Unsupported staging ingest job name: $JOB_NAME"
+                exit 1
+                ;;
+            esac
+          else
+            jobs=(
+              staging-sp-proto-birk01-pdf
+              staging-sp-proto-birk02-pdf
+              staging-sp-proto-birk03-pdf
+              staging-sp-proto-birk04-pdf
+            )
+          fi
+
+          for job in "${jobs[@]}"; do
             az containerapp job start \
               --name "$job" \
               --resource-group gramag-staging-rg \
