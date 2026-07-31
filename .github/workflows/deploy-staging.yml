@@ -291,6 +291,17 @@ jobs:
             --output tsv)"
           echo "$EXECUTION_NAME status=$status"
 
+          if [[ "$status" == "Failed" || "$status" == "Stopped" ]]; then
+            echo "Reading Container Apps execution logs for terminal failure"
+            az containerapp job logs show \
+              --name "$JOB_NAME" \
+              --resource-group gramag-staging-rg \
+              --execution "$EXECUTION_NAME" \
+              --container sharepoint-proto-ingest \
+              --tail 200 || true
+            exit 1
+          fi
+
           log_dir="/data/ingest-logs/$JOB_NAME"
           curl --max-time 30 -fsS \
             "https://staging-gramag-app.politemushroom-9223672b.westeurope.azurecontainerapps.io/health" \
