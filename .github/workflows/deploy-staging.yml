@@ -291,7 +291,7 @@ jobs:
             --output tsv)"
           echo "$EXECUTION_NAME status=$status"
 
-          log_dir="/data/ingest-logs"
+          log_dir="/data/ingest-logs/$JOB_NAME"
           curl --max-time 30 -fsS \
             "https://staging-gramag-app.politemushroom-9223672b.westeurope.azurecontainerapps.io/health" \
             >/dev/null || true
