@@ -10,6 +10,8 @@ on:
         type: choice
         options:
           - birkhaeuser-pdf
+          - digitec-image
+          - galledia-image
       mode:
         description: "Which idle jobs to restart"
         required: true
@@ -74,6 +76,34 @@ jobs:
                 proto-stage/birkhaeuser-pdf/_SUCCESS/birk02-pdf.json
                 proto-stage/birkhaeuser-pdf/_SUCCESS/birk03-pdf.json
                 proto-stage/birkhaeuser-pdf/_SUCCESS/birk04-pdf.json
+              )
+              ;;
+            digitec-image)
+              jobs=(
+                staging-sp-proto-dgx01-img
+                staging-sp-proto-dgx02-img
+                staging-sp-proto-dgx03-img
+                staging-sp-proto-dgx04-img
+              )
+              completion_markers=(
+                proto-stage/digitec-galaxus-image/_SUCCESS/dgx01-img.json
+                proto-stage/digitec-galaxus-image/_SUCCESS/dgx02-img.json
+                proto-stage/digitec-galaxus-image/_SUCCESS/dgx03-img.json
+                proto-stage/digitec-galaxus-image/_SUCCESS/dgx04-img.json
+              )
+              ;;
+            galledia-image)
+              jobs=(
+                staging-sp-proto-gal01-img
+                staging-sp-proto-gal02-img
+                staging-sp-proto-gal03-img
+                staging-sp-proto-gal04-img
+              )
+              completion_markers=(
+                proto-stage/galledia-print-image/_SUCCESS/gal01-img.json
+                proto-stage/galledia-print-image/_SUCCESS/gal02-img.json
+                proto-stage/galledia-print-image/_SUCCESS/gal03-img.json
+                proto-stage/galledia-print-image/_SUCCESS/gal04-img.json
               )
               ;;
             *)
