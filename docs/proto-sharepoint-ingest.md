@@ -90,6 +90,13 @@ execution history. A marker is written only after every expected staged input
 has a current successful checkpoint. Import jobs write their marker only after
 the import subprocess exits successfully.
 
+An intentionally omitted source file must be configured with the exact
+`--exclude-file-name` ingest argument. The selected manifest must contain
+exactly one matching basename or the job fails closed. The exclusion is printed
+in the durable job log and recorded in the completion marker's `ingest_args`;
+do not remove files from staged output or forge a successful checkpoint by
+hand.
+
 Backups are handled by:
 
 - `.github/workflows/backup-staging-data.yml`

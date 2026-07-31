@@ -367,6 +367,7 @@ class SharePointProtoSyncTests(unittest.TestCase):
                 payload = json.loads(marker.read_text())
                 self.assertEqual(payload["version"], 1)
                 self.assertEqual(payload["ingest_kinds"], "pdf,text")
+                self.assertEqual(payload["ingest_args"], [])
                 self.assertEqual(payload["manifest_sha256"], sync.file_sha256(manifest))
                 self.assertEqual(list(marker.parent.glob("*.tmp")), [])
         finally:

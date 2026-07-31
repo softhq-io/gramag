@@ -105,6 +105,31 @@ def parse_kinds(value: str) -> set[str]:
     return kinds
 
 
+def exclude_source_file_names(targets: list[dict], file_names: list[str]) -> list[dict]:
+    """Remove explicitly approved source files, requiring one exact match each."""
+    exclusions = [name for name in file_names if name]
+    for excluded_name in exclusions:
+        matches = []
+        for machine in targets:
+            for kind in SUPPORTED_KINDS:
+                for source in machine["files"][kind]:
+                    if source.get("name") == excluded_name:
+                        matches.append((machine, kind, source))
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"source exclusion {excluded_name!r} matched {len(matches)} files; "
+                "expected exactly one"
+            )
+        machine, kind, source = matches[0]
+        machine["files"][kind].remove(source)
+        print(
+            "Explicit source exclusion: "
+            f"machine={machine['slug']} kind={kind} rel={source['rel']}",
+            flush=True,
+        )
+    return targets
+
+
 def _load_checkpoint_file(path: Path) -> dict:
     if path.exists():
         return json.loads(path.read_text())
@@ -1062,6 +1087,15 @@ def main():
     ap.add_argument("--import-checkpoint", type=Path, default=None, help="Checkpoint path for staged JSONL import")
     ap.add_argument("--import-sleep", type=float, default=0.0, help="Seconds to sleep after each imported staged record")
     ap.add_argument(
+        "--exclude-file-name",
+        action="append",
+        default=[],
+        help=(
+            "Intentionally omit one source file by exact basename. "
+            "Each value must match exactly one selected source file."
+        ),
+    )
+    ap.add_argument(
         "--protected-baseline-json",
         default=os.getenv("PROTO_PROTECTED_BASELINE_JSON"),
         help="JSON counts for a customer that must remain unchanged across staged import",
@@ -1096,6 +1130,8 @@ def main():
         targets = manifest["machines"]
     else:
         targets = [m for m in manifest["machines"] if m["folder"] in SAMPLE_MACHINES]
+
+    exclude_source_file_names(targets, args.exclude_file_name)
 
     mode = "stage" if args.stage_output_dir else "direct"
     print(f"Targets: {len(targets)} machines (mode={mode}, kinds={','.join(sorted(args.kinds))}, "

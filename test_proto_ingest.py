@@ -106,6 +106,53 @@ class ProtoIngestTests(unittest.TestCase):
         with self.assertRaises(ingest.argparse.ArgumentTypeError):
             ingest.parse_kinds("pdf,video")
 
+    def test_source_exclusion_requires_one_exact_file_name_match(self):
+        targets = [
+            {
+                "slug": "machine-a",
+                "files": {
+                    "pdf": [
+                        {
+                            "name": "keep.pdf",
+                            "rel": "Manuals/keep.pdf",
+                        },
+                        {
+                            "name": "omit.pdf",
+                            "rel": "Manuals/omit.pdf",
+                        },
+                    ],
+                    "text": [],
+                    "image": [],
+                },
+            }
+        ]
+
+        with redirect_stdout(StringIO()):
+            ingest.exclude_source_file_names(targets, ["omit.pdf"])
+
+        self.assertEqual(
+            [source["name"] for source in targets[0]["files"]["pdf"]],
+            ["keep.pdf"],
+        )
+        with self.assertRaisesRegex(RuntimeError, "matched 0 files"):
+            ingest.exclude_source_file_names(targets, ["missing.pdf"])
+
+    def test_source_exclusion_rejects_ambiguous_file_name(self):
+        targets = [
+            {
+                "slug": f"machine-{index}",
+                "files": {
+                    "pdf": [{"name": "duplicate.pdf", "rel": f"{index}/duplicate.pdf"}],
+                    "text": [],
+                    "image": [],
+                },
+            }
+            for index in (1, 2)
+        ]
+
+        with self.assertRaisesRegex(RuntimeError, "matched 2 files"):
+            ingest.exclude_source_file_names(targets, ["duplicate.pdf"])
+
     def test_ingest_machine_filters_by_kind(self):
         calls = []
         originals = {

@@ -631,6 +631,7 @@ def write_completion_marker(args: argparse.Namespace):
         "manifest_path": str(manifest_path),
         "manifest_sha256": file_sha256(manifest_path),
         "ingest_kinds": getattr(args, "ingest_kinds", None),
+        "ingest_args": list(getattr(args, "ingest_arg", []) or []),
         "stage_output_dir": getattr(args, "ingest_stage_output_dir", None),
         "import_output_dir": getattr(args, "ingest_import_output_dir", None),
     }
