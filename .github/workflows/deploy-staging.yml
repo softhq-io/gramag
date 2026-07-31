@@ -311,7 +311,7 @@ jobs:
           if [[ "$JOB_NAME" == *-import-* ]]; then
             echo "Import checkpoint progress:"
             script -q -e -c \
-              "az containerapp exec --resource-group gramag-staging-rg --name staging-gramag-app --container gramag-app --command 'find /data/proto-ready -maxdepth 2 -name import_checkpoint.json -exec grep -Hc ts {} +'" \
+              "az containerapp exec --resource-group gramag-staging-rg --name staging-gramag-app --container gramag-app --command 'find /data/proto-ready -maxdepth 2 -name import_checkpoint.json -exec grep -Hc fingerprint {} +'" \
               /dev/null || true
           fi
 
