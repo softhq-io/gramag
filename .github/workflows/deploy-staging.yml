@@ -291,18 +291,18 @@ jobs:
             --output tsv)"
           echo "$EXECUTION_NAME status=$status"
 
-          log_path="/data/ingest-logs/$JOB_NAME/$EXECUTION_NAME.log"
+          log_dir="/data/ingest-logs/cache-${JOB_NAME#staging-sp-proto-}"
           curl --max-time 30 -fsS \
             "https://staging-gramag-app.politemushroom-9223672b.westeurope.azurecontainerapps.io/health" \
             >/dev/null || true
           for attempt in {1..5}; do
             if script -q -e -c \
-              "az containerapp exec --resource-group gramag-staging-rg --name staging-gramag-app --container gramag-app --command 'tail -n 200 $log_path'" \
+              "az containerapp exec --resource-group gramag-staging-rg --name staging-gramag-app --container gramag-app --command 'find $log_dir -maxdepth 1 -type f -exec tail -n 200 {} +'" \
               /dev/null; then
               break
             fi
             if [ "$attempt" = "5" ]; then
-              echo "Could not read durable log: $log_path"
+              echo "Could not read durable logs: $log_dir"
               exit 1
             fi
             sleep 10
