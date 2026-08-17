@@ -20,6 +20,8 @@ function App() {
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route index element={<Navigate to="/proto" replace />} />
             <Route path="/proto" element={<ProtoPage />} />
+            <Route path="/proto/machine/:machineSlug" element={<ProtoPage />} />
+            <Route path="/proto/machine/:machineSlug/chat/:chatId" element={<ProtoPage />} />
             <Route path="/mission/:machineErpId" element={<SuperadminRoute><MissionBriefingPage /></SuperadminRoute>} />
             <Route path="/part/:partNummer" element={<SuperadminRoute><PartDetailPage /></SuperadminRoute>} />
             <Route path="/fleet" element={<SuperadminRoute><FleetDashboardPage /></SuperadminRoute>} />

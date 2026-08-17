@@ -15,6 +15,7 @@ import type {
 } from '../api/proto'
 import { useAuth } from '../hooks/useAuth'
 import { useTranslation } from 'react-i18next'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 
 type ProtoSectionDetail = Awaited<ReturnType<typeof getProtoSection>>
 type Machine = CustomerOverview['machines'][number]
@@ -53,10 +54,15 @@ function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null 
 
 export function ProtoPage() {
   const { user } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { machineSlug: routeMachineSlug, chatId: routeChatId } = useParams<{
+    machineSlug?: string
+    chatId?: string
+  }>()
   const [overview, setOverview] = useState<CustomerOverview | null>(null)
   const [customer, setCustomer] = useState('')
   const [machineSlug, setMachineSlug] = useState('')
-  const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [askedQuery, setAskedQuery] = useState('')
   const [loading, setLoading] = useState(false)
@@ -68,6 +74,8 @@ export function ProtoPage() {
   const [sectionDetail, setSectionDetail] = useState<ProtoSectionDetail | null>(null)
   const [activeCite, setActiveCite] = useState<number | null>(null)
   const [loadError, setLoadError] = useState(false)
+  const [routeError, setRouteError] = useState('')
+  const [answerFocusId, setAnswerFocusId] = useState<string | null>(null)
 
   useEffect(() => {
     getCustomerOverview()
@@ -91,9 +99,9 @@ export function ProtoPage() {
   useEffect(() => {
     if (!canChooseClient && customerOptions.length === 1 && customer !== customerOptions[0]) {
       setCustomer(customerOptions[0])
-      setMachineSlug('')
+      if (!routeMachineSlug) setMachineSlug('')
     }
-  }, [canChooseClient, customer, customerOptions])
+  }, [canChooseClient, customer, customerOptions, routeMachineSlug])
 
   const availableMachines = useMemo(() => {
     if (!overview || !customer) return []
@@ -106,45 +114,104 @@ export function ProtoPage() {
     )
   }, [customer, overview])
 
-  const selectedMachine = overview?.machines.find((machine) => machine.slug === machineSlug) || null
+  const selectedMachine = overview?.machines.find(
+    (machine) => machine.slug === (routeMachineSlug || machineSlug),
+  ) || null
+
+  useEffect(() => {
+    if (!overview || !routeMachineSlug) return
+    const machine = overview.machines.find(item => item.slug === routeMachineSlug)
+    if (!machine) {
+      setRouteError('Die angeforderte Maschine ist nicht verfügbar.')
+      navigate('/proto', { replace: true })
+      return
+    }
+    const resolvedMachine = machine
+
+    let cancelled = false
+    setCustomer(resolvedMachine.customer || overview.customer.name)
+    setMachineSlug(resolvedMachine.slug)
+    setActiveChat(null)
+    setChatMessages([])
+    setSelectedAssistantId(null)
+    setSectionDetail(null)
+    setActiveCite(null)
+    if (!routeChatId) setRouteError('')
+
+    async function loadRoute() {
+      try {
+        const sessions = await listProtoChats({ machine_slug: resolvedMachine.slug })
+        if (!cancelled) setChatSessions(sessions)
+        if (!routeChatId) return
+
+        const detail = await getProtoChat(routeChatId)
+        if (cancelled) return
+        if (detail.session.machine_slug !== resolvedMachine.slug) {
+          throw new Error('Chat does not belong to the selected machine')
+        }
+        setActiveChat(detail.session)
+        setChatMessages(detail.messages)
+        const latestAssistant = [...detail.messages].reverse().find(message => message.role === 'assistant')
+        setSelectedAssistantId(latestAssistant?.id ?? null)
+        setRouteError('')
+      } catch (error) {
+        console.error(error)
+        if (!cancelled) {
+          setRouteError('Die angeforderte Unterhaltung ist nicht verfügbar.')
+          navigate('/proto', { replace: true })
+        }
+      }
+    }
+
+    void loadRoute()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate, overview, routeChatId, routeMachineSlug])
 
   function changeCustomer(value: string) {
     setCustomer(value)
     setMachineSlug('')
   }
 
-  async function enterWorkspace() {
+  function enterWorkspace() {
     if (!machineSlug) return
-    setWorkspaceOpen(true)
-    setActiveChat(null)
-    setChatMessages([])
-    setSelectedAssistantId(null)
-    setSectionDetail(null)
-    setActiveCite(null)
-    try {
-      setChatSessions(await listProtoChats({ machine_slug: machineSlug }))
-    } catch {
-      setChatSessions([])
+    navigate(`/proto/machine/${encodeURIComponent(machineSlug)}`, {
+      state: { protoParent: '/proto' },
+    })
+  }
+
+  function backTo(parentPath: string) {
+    const state = location.state as { protoParent?: string } | null
+    if (state?.protoParent === parentPath) {
+      navigate(-1)
+    } else {
+      navigate(parentPath, { replace: true })
     }
   }
 
   function leaveWorkspace() {
-    setWorkspaceOpen(false)
+    navigate('/proto')
     setActiveChat(null)
     setChatMessages([])
     setChatSessions([])
     setSelectedAssistantId(null)
     setSectionDetail(null)
     setActiveCite(null)
+    setAnswerFocusId(null)
     setQuery('')
   }
 
   function newChat() {
+    if (routeMachineSlug) {
+      navigate(`/proto/machine/${encodeURIComponent(routeMachineSlug)}`)
+    }
     setActiveChat(null)
     setChatMessages([])
     setSelectedAssistantId(null)
     setSectionDetail(null)
     setActiveCite(null)
+    setAnswerFocusId(null)
     setQuery('')
   }
 
@@ -183,10 +250,17 @@ export function ProtoPage() {
         response.assistant_message,
       ])
       setSelectedAssistantId(response.assistant_message.id)
+      setAnswerFocusId(response.assistant_message.id)
       setChatSessions((previous) => [
         response.session,
         ...previous.filter((item) => item.id !== response.session.id),
       ])
+      if (routeChatId !== response.session.id) {
+        const machinePath = `/proto/machine/${encodeURIComponent(selectedMachine.slug)}`
+        navigate(`${machinePath}/chat/${encodeURIComponent(response.session.id)}`, {
+          state: { protoParent: machinePath },
+        })
+      }
     } catch (error) {
       console.error(error)
       setQuery(text)
@@ -195,21 +269,16 @@ export function ProtoPage() {
     }
   }
 
-  async function openChat(session: ProtoChatSession) {
-    setLoading(true)
-    setSectionDetail(null)
-    setActiveCite(null)
-    try {
-      const detail = await getProtoChat(session.id)
-      setActiveChat(detail.session)
-      setChatMessages(detail.messages)
-      const latestAssistant = [...detail.messages].reverse().find((message) => message.role === 'assistant')
-      setSelectedAssistantId(latestAssistant?.id ?? null)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
-    }
+  function openChat(session: ProtoChatSession) {
+    if (!routeMachineSlug) return
+    setAnswerFocusId(null)
+    const machinePath = `/proto/machine/${encodeURIComponent(routeMachineSlug)}`
+    const state = location.state as { protoParent?: string } | null
+    const canPopToMachine = !routeChatId || state?.protoParent === machinePath
+    navigate(`${machinePath}/chat/${encodeURIComponent(session.id)}`, {
+      replace: Boolean(routeChatId),
+      state: canPopToMachine ? { protoParent: machinePath } : null,
+    })
   }
 
   async function showSection(sectionId: string | undefined, index: number) {
@@ -243,7 +312,8 @@ export function ProtoPage() {
 
   return (
     <div className="proto-app">
-      {!workspaceOpen || !selectedMachine ? (
+      {routeError && <div className="proto-route-error" role="alert">{routeError}</div>}
+      {!routeMachineSlug || !selectedMachine ? (
         <SelectionView
           customer={customer}
           customerOptions={customerOptions}
@@ -278,6 +348,14 @@ export function ProtoPage() {
           sectionDetail={sectionDetail}
           setSectionDetail={setSectionDetail}
           setLightbox={setLightbox}
+          focusAssistantId={answerFocusId}
+          onBack={() => {
+            if (routeChatId) {
+              backTo(`/proto/machine/${encodeURIComponent(selectedMachine.slug)}`)
+            } else {
+              backTo('/proto')
+            }
+          }}
         />
       )}
 
@@ -352,20 +430,12 @@ function SelectionView({
                 <span className="proto-static-check">✓</span>
               </div>
             ) : (
-              <div className="proto-select-control">
-                <ClientIcon />
-                <select
-                  id="proto-customer"
-                  value={customer}
-                  onChange={(event) => onCustomerChange(event.target.value)}
-                >
-                  <option value="">Kunden auswählen</option>
-                  {customerOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-                <ChevronIcon />
-              </div>
+              <SearchableCustomerSelect
+                id="proto-customer"
+                value={customer}
+                options={customerOptions}
+                onChange={onCustomerChange}
+              />
             )}
           </div>
         </div>
@@ -393,6 +463,7 @@ function SelectionView({
             <div>
               <strong>{selectedMachine.model || selectedMachine.folder}</strong>
               <span>{selectedMachine.type || 'Maschine'} · {selectedMachine.hersteller}</span>
+              <span className="proto-machine-serial">{machineSerialLabel(selectedMachine)}</span>
             </div>
             <div className="proto-machine-docs">
               {selectedMachine.pdfs ?? 0} PDF · {selectedMachine.sections ?? 0} Seiten
@@ -415,6 +486,109 @@ function SelectionView({
         <ShieldIcon /> Antworten basieren ausschließlich auf freigegebener Maschinen- und Service-Dokumentation.
       </p>
     </main>
+  )
+}
+
+function SearchableCustomerSelect({
+  id,
+  value,
+  options,
+  onChange,
+}: {
+  id: string
+  value: string
+  options: string[]
+  onChange: (value: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
+  const visibleOptions = useMemo(() => {
+    const needle = search.trim().toLocaleLowerCase('de-CH')
+    return options.filter(option => option.toLocaleLowerCase('de-CH').includes(needle))
+  }, [options, search])
+
+  function pick(option: string) {
+    onChange(option)
+    setSearch('')
+    setOpen(false)
+    setActiveIndex(0)
+  }
+
+  return (
+    <div className={`proto-machine-picker proto-customer-picker ${open ? 'open' : ''}`}>
+      <ClientIcon />
+      <input
+        id={id}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={`${id}-options`}
+        aria-autocomplete="list"
+        aria-activedescendant={open && visibleOptions[activeIndex]
+          ? `${id}-option-${activeIndex}`
+          : undefined}
+        autoComplete="off"
+        value={open ? search : value}
+        placeholder="Kunden suchen …"
+        onFocus={() => {
+          setSearch('')
+          setOpen(true)
+          setActiveIndex(Math.max(0, options.indexOf(value)))
+        }}
+        onBlur={() => window.setTimeout(() => setOpen(false), 140)}
+        onChange={event => {
+          setSearch(event.target.value)
+          setOpen(true)
+          setActiveIndex(0)
+        }}
+        onKeyDown={event => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            setOpen(true)
+            setActiveIndex(index => Math.min(index + 1, Math.max(0, visibleOptions.length - 1)))
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            setOpen(true)
+            setActiveIndex(index => Math.max(0, index - 1))
+          } else if (event.key === 'Enter' && open && visibleOptions[activeIndex]) {
+            event.preventDefault()
+            pick(visibleOptions[activeIndex])
+          } else if (event.key === 'Escape') {
+            setOpen(false)
+            setSearch('')
+          }
+        }}
+      />
+      <ChevronIcon />
+      {open && (
+        <div
+          className="proto-machine-menu proto-customer-menu below"
+          id={`${id}-options`}
+          role="listbox"
+          onMouseDown={event => event.preventDefault()}
+        >
+          <div className="proto-machine-menu-count">{visibleOptions.length} Kunden</div>
+          {visibleOptions.length > 0 ? visibleOptions.map((option, index) => (
+            <button
+              key={option}
+              id={`${id}-option-${index}`}
+              type="button"
+              role="option"
+              aria-selected={option === value}
+              className={`${option === value ? 'selected' : ''} ${index === activeIndex ? 'keyboard-active' : ''}`}
+              onMouseEnter={() => setActiveIndex(index)}
+              onClick={() => pick(option)}
+            >
+              <span className="proto-machine-option-icon"><ClientIcon /></span>
+              <span><strong>{option}</strong><small>Freigegebener Kunde</small></span>
+              {option === value && <span className="proto-machine-option-check">✓</span>}
+            </button>
+          )) : (
+            <div className="proto-machine-menu-empty">Kein passender Kunde gefunden</div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -569,6 +743,10 @@ function machineLabel(machine: Machine): string {
   return `${machine.model || machine.folder}${machine.serial ? ` · ${machine.serial}` : ''}`
 }
 
+function machineSerialLabel(machine: Machine): string {
+  return machine.serial ? `Serial number: ${machine.serial}` : 'Serial number not available'
+}
+
 function ChatWorkspace({
   machine,
   customer,
@@ -591,6 +769,8 @@ function ChatWorkspace({
   sectionDetail,
   setSectionDetail,
   setLightbox,
+  focusAssistantId,
+  onBack,
 }: {
   machine: Machine
   customer: string
@@ -613,21 +793,26 @@ function ChatWorkspace({
   sectionDetail: ProtoSectionDetail | null
   setSectionDetail: (section: ProtoSectionDetail | null) => void
   setLightbox: (url: string | null) => void
+  focusAssistantId: string | null
+  onBack: () => void
 }) {
   const { i18n } = useTranslation()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(false)
   const [dictating, setDictating] = useState(false)
   const [dictationStatus, setDictationStatus] = useState('')
-  const threadEndRef = useRef<HTMLDivElement | null>(null)
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
   const dictationBaseRef = useRef('')
   const recognitionErrorRef = useRef(false)
   const suggestions = buildSuggestions(machine).slice(0, 4)
 
   useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [loading, messages])
+    if (!focusAssistantId) return
+    document.getElementById(`proto-message-${focusAssistantId}`)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }, [focusAssistantId, messages])
 
   useEffect(() => {
     setSpeechSupported(Boolean(getSpeechRecognitionConstructor()))
@@ -637,16 +822,16 @@ function ChatWorkspace({
     }
   }, [])
 
-  const selectedAssistant =
-    messages.find((message) => message.id === selectedAssistantId && message.role === 'assistant') ||
-    [...messages].reverse().find((message) => message.role === 'assistant') ||
-    null
-  const selectedAssistantIndex = selectedAssistant
-    ? messages.findIndex((message) => message.id === selectedAssistant.id)
-    : -1
-  const selectedQuery = selectedAssistantIndex > 0
-    ? [...messages.slice(0, selectedAssistantIndex)].reverse().find((message) => message.role === 'user')?.text || askedQuery
-    : askedQuery
+  const assistantQueries = useMemo(() => {
+    const result = new Map<string, string>()
+    let lastUserQuery = askedQuery
+    for (const message of messages) {
+      if (message.role === 'user') lastUserQuery = message.text
+      else result.set(message.id, lastUserQuery)
+    }
+    return result
+  }, [askedQuery, messages])
+  const readOnly = Boolean(activeChat && !activeChat.owned_by_me)
 
   function chooseChat(session: ProtoChatSession) {
     void onOpenChat(session)
@@ -726,6 +911,7 @@ function ChatWorkspace({
   }
 
   function submitMessage() {
+    if (readOnly) return
     stopDictation()
     onAsk()
   }
@@ -774,6 +960,7 @@ function ChatWorkspace({
           <span>
             <small>Aktive Maschine</small>
             <strong>{machine.model || machine.folder}</strong>
+            <em>{machineSerialLabel(machine)}</em>
             <em>{customer}</em>
           </span>
           <ChevronIcon direction="right" />
@@ -782,6 +969,15 @@ function ChatWorkspace({
 
       <section className="proto-conversation">
         <header className="proto-conversation-header">
+          <button
+            type="button"
+            className="proto-back"
+            onClick={onBack}
+            aria-label="Zurück"
+            title="Zurück"
+          >
+            <BackIcon />
+          </button>
           <button
             type="button"
             className="proto-mobile-menu"
@@ -793,6 +989,7 @@ function ChatWorkspace({
           <div className="proto-conversation-scope">
             <strong>{machine.model || machine.folder}</strong>
             <span>{customer} · {machine.hersteller}</span>
+            <span className="proto-conversation-serial">{machineSerialLabel(machine)}</span>
           </div>
           <button type="button" className="proto-change-scope" onClick={onChangeScope}>
             Maschine wechseln
@@ -819,13 +1016,17 @@ function ChatWorkspace({
           ) : (
             <div className="proto-message-list">
               {messages.map((message) => (
-                <div key={message.id} className={`proto-chat-message ${message.role}`}>
+                <div
+                  id={`proto-message-${message.id}`}
+                  key={message.id}
+                  className={`proto-chat-message ${message.role}`}
+                >
                   <div className="proto-avatar" aria-hidden="true">
-                    {message.role === 'assistant' ? 'M' : (message.username || 'S').slice(0, 1).toUpperCase()}
+                    {message.role === 'assistant' ? 'M' : activeChat?.owned_by_me ? 'S' : 'B'}
                   </div>
                   <div className="proto-message-content">
                     <div className="proto-chat-message-meta">
-                      <strong>{message.role === 'assistant' ? 'MachineGKI' : message.username || 'Sie'}</strong>
+                      <strong>{message.role === 'assistant' ? 'MachineGKI' : activeChat?.owned_by_me ? 'Sie' : 'Benutzer'}</strong>
                       <span>{formatDateShort(message.created_at)}</span>
                     </div>
                     {message.role === 'assistant' ? (
@@ -839,7 +1040,7 @@ function ChatWorkspace({
                             {message.citations!.map((citation) => (
                               <button
                                 key={`${message.id}-${citation.idx}`}
-                                className={`proto-cite ${selectedAssistant?.id === message.id && activeCite === citation.idx ? 'active' : ''}`}
+                                className={`proto-cite ${selectedAssistantId === message.id && activeCite === citation.idx ? 'active' : ''}`}
                                 onClick={() => {
                                   setSelectedAssistantId(message.id)
                                   if (citation.kind === 'page' && citation.section_id) {
@@ -854,6 +1055,42 @@ function ChatWorkspace({
                               </button>
                             ))}
                           </div>
+                        )}
+                        {(message.hits?.length ?? 0) > 0 && (
+                          <MessageSources
+                            message={message}
+                            query={assistantQueries.get(message.id) || askedQuery}
+                            activeCite={selectedAssistantId === message.id ? activeCite : null}
+                            onSelect={(hit, index) => {
+                              setSelectedAssistantId(message.id)
+                              if (hit.label === 'ManualSection') {
+                                void showSection(hit.id, index)
+                              } else {
+                                setActiveCite(index)
+                                setSectionDetail(null)
+                              }
+                            }}
+                          />
+                        )}
+                        {selectedAssistantId === message.id && sectionDetail && (
+                          <aside className="proto-detail">
+                            <div className="proto-detail-heading">
+                              <span>{sectionDetail.doc_name} · Seite {sectionDetail.page}</span>
+                              <a
+                                href={`/api/proto/view/${sectionDetail.doc_id}?page=${sectionDetail.page}`}
+                                className="proto-open-document"
+                              >
+                                Dokument öffnen
+                              </a>
+                            </div>
+                            <div className="proto-detail-big">
+                              <img
+                                src={`/api/proto/page-image/${sectionDetail.id}`}
+                                alt={`${sectionDetail.doc_name}, Seite ${sectionDetail.page}`}
+                                onClick={() => setLightbox(`/api/proto/page-image/${sectionDetail.id}`)}
+                              />
+                            </div>
+                          </aside>
                         )}
                       </>
                     ) : (
@@ -875,65 +1112,20 @@ function ChatWorkspace({
                   </div>
                 </div>
               )}
-
-              {selectedAssistant && (selectedAssistant.hits?.length ?? 0) > 0 && (
-                <section className="proto-chat-evidence">
-                  <div className="proto-chat-evidence-title">Quellen zur ausgewählten Antwort</div>
-                  <div className="proto-hits">
-                    {selectedAssistant.hits!.map((hit, index) => (
-                      <HitCard
-                        key={`${selectedAssistant.id}-${hit.label}-${hit.id}`}
-                        hit={hit}
-                        idx={index + 1}
-                        active={activeCite === index + 1}
-                        query={selectedQuery}
-                        onClick={() => {
-                          setSelectedAssistantId(selectedAssistant.id)
-                          if (hit.label === 'ManualSection') {
-                            void showSection(hit.id, index + 1)
-                          } else {
-                            setActiveCite(index + 1)
-                            setSectionDetail(null)
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {sectionDetail && (
-                <aside className="proto-detail">
-                  <h3>
-                    {sectionDetail.machine} ·{' '}
-                    <a
-                      href={`/api/proto/view/${sectionDetail.doc_id}?page=${sectionDetail.page}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="proto-hit-doc-link"
-                    >
-                      {sectionDetail.doc_name} ↗
-                    </a>{' '}
-                    · Seite {sectionDetail.page}
-                  </h3>
-                  <div className="proto-detail-big">
-                    <img
-                      src={`/api/proto/page-image/${sectionDetail.id}`}
-                      alt="Dokumentseite"
-                      onClick={() => setLightbox(`/api/proto/page-image/${sectionDetail.id}`)}
-                    />
-                  </div>
-                </aside>
-              )}
-              <div ref={threadEndRef} />
             </div>
           )}
         </div>
 
         <footer className="proto-composer-wrap">
+          {readOnly && (
+            <div className="proto-read-only" role="status">
+              Anonyme Unterhaltung eines anderen Benutzers · Nur Lesen
+            </div>
+          )}
           <div className="proto-chat-composer">
             <textarea
               value={query}
+              disabled={readOnly}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey && !loading && query.trim()) {
@@ -941,10 +1133,10 @@ function ChatWorkspace({
                   submitMessage()
                 }
               }}
-              placeholder="Fragen Sie MachineGKI …"
+              placeholder={readOnly ? 'Diese Unterhaltung ist schreibgeschützt.' : 'Fragen Sie MachineGKI …'}
               rows={1}
             />
-            {speechSupported && (
+            {speechSupported && !readOnly && (
               <button
                 type="button"
                 className={`proto-dictate ${dictating ? 'active' : ''}`}
@@ -960,7 +1152,7 @@ function ChatWorkspace({
               type="button"
               className="proto-send"
               onClick={submitMessage}
-              disabled={loading || !query.trim()}
+              disabled={readOnly || loading || !query.trim()}
               aria-label="Nachricht senden"
             >
               <SendIcon />
@@ -978,6 +1170,52 @@ function ChatWorkspace({
         </footer>
       </section>
     </div>
+  )
+}
+
+function MessageSources({
+  message,
+  query,
+  activeCite,
+  onSelect,
+}: {
+  message: ProtoChatMessage
+  query: string
+  activeCite: number | null
+  onSelect: (hit: ProtoHit, index: number) => void
+}) {
+  const [expanded, setExpanded] = useState(() => (
+    typeof window === 'undefined' || !window.matchMedia('(max-width: 620px)').matches
+  ))
+  const hits = message.hits || []
+
+  return (
+    <section className="proto-chat-evidence">
+      <button
+        type="button"
+        className="proto-sources-toggle"
+        aria-expanded={expanded}
+        aria-controls={`proto-sources-${message.id}`}
+        onClick={() => setExpanded(value => !value)}
+      >
+        <span>Quellen ({hits.length})</span>
+        <ChevronIcon />
+      </button>
+      {expanded && (
+        <div className="proto-hits" id={`proto-sources-${message.id}`}>
+          {hits.map((hit, index) => (
+            <HitCard
+              key={`${message.id}-${hit.label}-${hit.id}`}
+              hit={hit}
+              idx={index + 1}
+              active={activeCite === index + 1}
+              query={query}
+              onClick={() => onSelect(hit, index + 1)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -1032,19 +1270,19 @@ function HitCard({
             <span className="proto-hit-score">{hit.score.toFixed(3)}</span>
           </div>
           <div className="proto-hit-title">{hit.machine_folder}</div>
-          <a
-            className="proto-hit-sub proto-hit-doc-link"
-            href={`/api/proto/view/${hit.document_id}${hit.page ? `?page=${hit.page}` : ''}`}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {hit.doc_name}{hit.page ? ` · S. ${hit.page}` : ''} ↗
-          </a>
+          <div className="proto-hit-sub">{hit.doc_name}{hit.page ? ` · S. ${hit.page}` : ''}</div>
         </div>
       </div>
       {headline && <div className="proto-hit-headline">{headline}</div>}
       {sub && <div className="proto-hit-snippet" dangerouslySetInnerHTML={{ __html: sub }} />}
+      <a
+        className="proto-open-document"
+        href={`/api/proto/view/${hit.document_id}${hit.page ? `?page=${hit.page}` : ''}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        Dokument öffnen
+        <ArrowIcon />
+      </a>
     </article>
   )
 }
@@ -1079,6 +1317,10 @@ function PlusIcon() {
 
 function MenuIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+}
+
+function BackIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11" /></svg>
 }
 
 function SendIcon() {

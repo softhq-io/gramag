@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from db_helpers import result_single, result_to_dicts
+from db_helpers import result_single, result_to_dicts, result_value
 from embeddings import generate_embedding, generate_query_embedding
 from proto.db_proto import proto_db
 
@@ -52,9 +52,7 @@ def create_session(
     now = _now()
     session_id = _new_id("chat")
     clean_title = (title or "Neue Unterhaltung").strip()[:120]
-    username = user.get("username") or "anonymous"
-    username = user.get("email") or username
-    user_id = user.get("id") or username
+    user_id = user["id"]
     proto_db.write(
         """
         CREATE (s:ProtoChatSession {
@@ -65,9 +63,8 @@ def create_session(
           title: $title,
           created_at: $now,
           updated_at: $now,
-          created_by: $username,
           created_by_id: $user_id,
-          isolation_version: 2
+          isolation_version: 3
         })
         """,
         {
@@ -77,7 +74,6 @@ def create_session(
             "client_id": client_id,
             "title": clean_title,
             "now": now,
-            "username": username,
             "user_id": user_id,
         },
     )
@@ -89,7 +85,7 @@ def create_session(
             """,
             {"slug": machine_slug, "id": session_id},
         )
-    return get_session(session_id) or {
+    return get_session(session_id, user=user) or {
         "id": session_id,
         "machine_slug": machine_slug,
         "customer": customer,
@@ -97,12 +93,12 @@ def create_session(
         "title": clean_title,
         "created_at": now,
         "updated_at": now,
-        "created_by": username,
+        "owned_by_me": True,
         "message_count": 0,
     }
 
 
-def get_session(session_id: str) -> dict | None:
+def get_session(session_id: str, *, user: dict) -> dict | None:
     row = result_single(
         proto_db.query(
             """
@@ -115,11 +111,11 @@ def get_session(session_id: str) -> dict | None:
                    s.title AS title,
                    s.created_at AS created_at,
                    s.updated_at AS updated_at,
-                   s.created_by AS created_by,
+                   s.created_by_id = $user_id AS owned_by_me,
                    message_count,
                    last_message_at
             """,
-            {"id": session_id},
+            {"id": session_id, "user_id": user["id"]},
         )
     )
     return row
@@ -142,9 +138,10 @@ def list_sessions(
             WHERE ($machine_slug IS NULL OR s.machine_slug = $machine_slug)
               AND ($customer IS NULL OR coalesce(s.customer, '') = $customer)
               AND ($all_clients
-                   OR (coalesce(s.isolation_version, 0) >= 2 AND
-                       ((m.slug IS NOT NULL AND m.erp_customer_id IN $client_ids)
-                        OR (m.slug IS NULL AND s.created_by_id = $user_id))))
+                   OR (coalesce(s.isolation_version, 0) >= 2
+                       AND s.created_by_id = $user_id
+                       AND ((m.slug IS NOT NULL AND m.erp_customer_id IN $client_ids)
+                            OR s.machine_slug IS NULL)))
             OPTIONAL MATCH (s)-[:HAS_MESSAGE]->(msg:ProtoChatMessage)
             WITH s, count(msg) AS message_count, max(msg.created_at) AS last_message_at
             RETURN s.id AS id,
@@ -153,7 +150,7 @@ def list_sessions(
                    s.title AS title,
                    s.created_at AS created_at,
                    s.updated_at AS updated_at,
-                   s.created_by AS created_by,
+                   s.created_by_id = $user_id AS owned_by_me,
                    message_count,
                    last_message_at
             ORDER BY coalesce(last_message_at, s.updated_at) DESC
@@ -173,8 +170,6 @@ def _message_from_row(row: dict) -> dict:
         "role": row.get("role"),
         "text": row.get("text") or "",
         "created_at": row.get("created_at"),
-        "username": row.get("username"),
-        "user_role": row.get("user_role"),
         "model": row.get("model"),
         "citations": _json_loads(row.get("citations_json")),
         "hits": _json_loads(row.get("hits_json")),
@@ -191,8 +186,6 @@ def list_messages(session_id: str) -> list[dict]:
                    msg.role AS role,
                    msg.text AS text,
                    msg.created_at AS created_at,
-                   msg.username AS username,
-                   msg.user_role AS user_role,
                    msg.model AS model,
                    msg.citations_json AS citations_json,
                    msg.hits_json AS hits_json
@@ -209,23 +202,18 @@ def append_message(
     session_id: str,
     role: str,
     text: str,
-    user: dict,
     model: str | None = None,
     citations: list[dict] | None = None,
     hits: list[dict] | None = None,
 ) -> dict:
     now = _now()
     message_id = _new_id("msg")
-    username = user.get("email") or user.get("username") or "anonymous"
-    user_role = user.get("role") or "viewer"
     params = {
         "session_id": session_id,
         "id": message_id,
         "role": role,
         "text": text,
         "created_at": now,
-        "username": username,
-        "user_role": user_role,
         "model": model,
         "citations_json": _json_dumps(citations),
         "hits_json": _json_dumps(hits),
@@ -239,8 +227,6 @@ def append_message(
           role: $role,
           text: $text,
           created_at: $created_at,
-          username: $username,
-          user_role: $user_role,
           model: $model,
           citations_json: $citations_json,
           hits_json: $hits_json
@@ -265,6 +251,7 @@ def retrieve_memory(
     *,
     query: str,
     session: dict,
+    user: dict,
     limit: int = 6,
     min_score: float = 0.55,
 ) -> list[dict]:
@@ -284,13 +271,12 @@ def retrieve_memory(
                     WHERE s.id <> $session_id
                       AND s.machine_slug = $machine_slug
                       AND coalesce(s.isolation_version, 0) >= 2
+                      AND ($all_clients OR s.created_by_id = $user_id)
                     RETURN msg.id AS id,
                            msg.session_id AS session_id,
                            msg.role AS role,
                            msg.text AS text,
                            msg.created_at AS created_at,
-                           msg.username AS username,
-                           msg.user_role AS user_role,
                            msg.model AS model,
                            s.title AS session_title,
                            s.machine_slug AS machine_slug,
@@ -304,6 +290,8 @@ def retrieve_memory(
                         "k": limit,
                         "session_id": current_session_id,
                         "machine_slug": machine_slug,
+                        "all_clients": bool(user.get("all_clients")),
+                        "user_id": user["id"],
                     },
                 )
             )
@@ -311,3 +299,58 @@ def retrieve_memory(
         print(f"chat memory search failed (machine): {e}")
         return []
     return [row for row in rows if float(row.get("score") or 0) >= min_score][:limit]
+
+
+def anonymize_chat_authors() -> dict[str, int]:
+    """Remove stored display identities while preserving opaque ownership."""
+    sessions = result_value(
+        proto_db.write(
+            """
+            MATCH (s:ProtoChatSession)
+            WHERE s.created_by IS NOT NULL
+               OR (s.created_by_id IS NOT NULL AND coalesce(s.isolation_version, 0) < 3)
+            WITH s, 1 AS changed
+            REMOVE s.created_by
+            SET s.isolation_version = CASE
+                WHEN s.created_by_id IS NOT NULL THEN 3
+                ELSE coalesce(s.isolation_version, 0)
+            END
+            RETURN sum(changed) AS changed
+            """
+        ),
+        "changed",
+        0,
+    )
+    messages = result_value(
+        proto_db.write(
+            """
+            MATCH (msg:ProtoChatMessage)
+            WHERE msg.username IS NOT NULL OR msg.user_role IS NOT NULL
+            WITH msg, 1 AS changed
+            REMOVE msg.username, msg.user_role
+            RETURN sum(changed) AS changed
+            """
+        ),
+        "changed",
+        0,
+    )
+    return {"sessions": int(sessions or 0), "messages": int(messages or 0)}
+
+
+def anonymize_deleted_user(user_id: str) -> None:
+    """Make retained chats unlinkable from a permanently deleted user."""
+    proto_db.write(
+        """
+        MATCH (:ProtoChatSession {created_by_id: $user_id})-[:HAS_MESSAGE]->(msg)
+        REMOVE msg.username, msg.user_role
+        """,
+        {"user_id": user_id},
+    )
+    proto_db.write(
+        """
+        MATCH (s:ProtoChatSession {created_by_id: $user_id})
+        REMOVE s.created_by, s.created_by_id
+        SET s.isolation_version = 3
+        """,
+        {"user_id": user_id},
+    )

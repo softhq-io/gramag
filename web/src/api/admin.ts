@@ -1,4 +1,4 @@
-import { get, patch, post } from './client'
+import { del, get, patch, post } from './client'
 import type { UserRole } from './auth'
 
 export interface AdminUser {
@@ -42,6 +42,9 @@ export const createUser = (body: {
 
 export const updateUser = (id: string, body: UserWrite) =>
   patch<AdminUser>(`/admin/users/${encodeURIComponent(id)}`, body)
+
+export const deleteUser = (id: string) =>
+  del(`/admin/users/${encodeURIComponent(id)}`)
 
 export const resetUserPassword = (id: string) =>
   post<{ temporary_password: string }>(

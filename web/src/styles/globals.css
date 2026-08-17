@@ -2677,6 +2677,9 @@ body {
 .admin-user-actions { display: flex; gap: 6px; }
 .admin-user-actions button, .admin-user-create button, .admin-message button { border: 0; border-radius: 6px; padding: 8px 10px; cursor: pointer; color: white; background: var(--accent-blue); }
 .admin-user-actions button.secondary, .admin-message button { background: var(--bg-tertiary); }
+.admin-user-actions button.danger { background: #a12d35; }
+.admin-user-actions button.danger:hover:not(:disabled) { background: #c13943; }
+.admin-user-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
 .admin-user-grants { grid-column: 1 / -1; }
 .client-picker { position: relative; min-width: 0; }
 .client-picker-control { min-height: 38px; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 5px 28px 5px 7px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; cursor: text; position: relative; }
@@ -2792,11 +2795,29 @@ body {
 }
 
 .proto-app {
+  position: relative;
   height: 100%;
   color: var(--proto-text);
   background:
     radial-gradient(circle at 50% -15%, rgba(18, 189, 213, 0.08), transparent 36%),
     var(--proto-bg);
+}
+
+.proto-route-error {
+  position: absolute;
+  z-index: 90;
+  top: 12px;
+  left: 50%;
+  width: min(calc(100% - 24px), 560px);
+  padding: 10px 14px;
+  transform: translateX(-50%);
+  border: 1px solid #8b3434;
+  border-radius: 9px;
+  background: #301919;
+  color: #ffb8b8;
+  font-size: 12px;
+  text-align: center;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
 }
 
 .proto-state-page {
@@ -3193,8 +3214,13 @@ body {
 }
 
 .proto-machine-menu > button:hover,
-.proto-machine-menu > button.selected {
+.proto-machine-menu > button.selected,
+.proto-machine-menu > button.keyboard-active {
   background: var(--proto-panel-raised);
+}
+
+.proto-customer-menu > button.keyboard-active {
+  box-shadow: inset 0 0 0 1px var(--proto-cyan);
 }
 
 .proto-machine-option-icon {
@@ -3613,9 +3639,9 @@ body {
 
 .proto-conversation-header {
   display: grid;
-  min-height: 58px;
+  min-height: 66px;
   padding: 8px 12px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--proto-border-soft);
@@ -3623,7 +3649,8 @@ body {
   backdrop-filter: blur(14px);
 }
 
-.proto-mobile-menu {
+.proto-mobile-menu,
+.proto-back {
   display: grid;
   width: 36px;
   height: 36px;
@@ -3634,13 +3661,24 @@ body {
   color: var(--proto-muted);
 }
 
-.proto-mobile-menu svg {
+.proto-mobile-menu svg,
+.proto-back svg {
   width: 17px;
   height: 17px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-width: 1.8;
+}
+
+.proto-back {
+  cursor: pointer;
+}
+
+.proto-back:hover,
+.proto-mobile-menu:hover {
+  border-color: var(--proto-cyan);
+  color: var(--proto-cyan);
 }
 
 .proto-conversation-scope {
@@ -3653,6 +3691,11 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.proto-conversation-scope .proto-conversation-serial,
+.proto-machine-serial {
+  color: var(--proto-cyan);
 }
 
 .proto-conversation-scope strong {
@@ -3797,6 +3840,7 @@ body {
   border-bottom: 1px solid var(--proto-border-soft);
   border-radius: 0;
   background: transparent;
+  scroll-margin-top: 12px;
 }
 
 .proto-message-list .proto-chat-message.user,
@@ -3883,11 +3927,41 @@ body {
 }
 
 .proto-chat-evidence {
-  margin-top: 22px;
-  padding: 16px;
+  margin-top: 16px;
+  padding: 10px;
   border: 1px solid var(--proto-border);
   border-radius: 12px;
   background: var(--proto-panel);
+}
+
+.proto-sources-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 4px;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  background: transparent;
+  color: var(--proto-text);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.proto-sources-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  transition: transform 0.15s ease;
+}
+
+.proto-sources-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
 }
 
 .proto-chat-evidence .proto-hits {
@@ -3909,10 +3983,66 @@ body {
   background: var(--proto-panel);
 }
 
+.proto-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--proto-text);
+  font-size: 12px;
+}
+
+.proto-open-document {
+  display: inline-flex;
+  min-height: 44px;
+  padding: 0 14px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--proto-cyan);
+  border-radius: 9px;
+  background: var(--proto-cyan-soft);
+  color: var(--proto-cyan);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.proto-open-document:hover {
+  background: var(--proto-cyan);
+  color: #031014;
+}
+
+.proto-open-document svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.proto-hit > .proto-open-document {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .proto-composer-wrap {
   padding: 10px 12px 8px;
   border-top: 1px solid var(--proto-border-soft);
   background: linear-gradient(180deg, rgba(8, 13, 20, 0.92), var(--proto-bg));
+}
+
+.proto-read-only {
+  width: min(100%, 780px);
+  margin: 0 auto 8px;
+  padding: 8px 12px;
+  border: 1px solid #735f29;
+  border-radius: 8px;
+  background: #282313;
+  color: #e8d68e;
+  font-size: 11px;
+  text-align: center;
 }
 
 .proto-composer-wrap .proto-chat-composer {
@@ -4151,7 +4281,7 @@ body {
   .proto-conversation-header {
     padding-right: 22px;
     padding-left: 22px;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
   .proto-conversation-scope strong {
@@ -4192,6 +4322,15 @@ body {
   .proto-composer-wrap .proto-send {
     width: 42px;
     height: 42px;
+  }
+
+  .proto-detail-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .proto-detail-heading .proto-open-document {
+    width: 100%;
   }
 
   .app-proto .topbar-user {

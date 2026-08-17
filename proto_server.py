@@ -40,10 +40,23 @@ app.include_router(fleet_router)
 def startup():
     try:
         proto_db.connect()
-        stats = proto_db.stats()
-        print(f"Proto graph connected: {sum(stats['nodes'].values())} nodes")
     except Exception as e:
         print(f"WARNING: proto graph not available: {e}")
+    else:
+        from proto.chat_store import anonymize_chat_authors
+
+        try:
+            privacy_changes = anonymize_chat_authors()
+        except Exception as e:
+            raise RuntimeError("Chat privacy migration failed; refusing to start") from e
+        stats = proto_db.stats()
+        print(f"Proto graph connected: {sum(stats['nodes'].values())} nodes")
+        if privacy_changes["sessions"] or privacy_changes["messages"]:
+            print(
+                "Chat privacy migration complete: "
+                f"sessions={privacy_changes['sessions']}, "
+                f"messages={privacy_changes['messages']}"
+            )
 
     try:
         from db import db

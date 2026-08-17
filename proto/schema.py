@@ -52,13 +52,11 @@ def apply_indexes():
         ("ProtoChatSession", "customer"),
         ("ProtoChatSession", "client_id"),
         ("ProtoChatSession", "updated_at"),
-        ("ProtoChatSession", "created_by"),
         ("ProtoChatSession", "created_by_id"),
         ("ProtoChatSession", "isolation_version"),
         ("ProtoChatMessage", "id"),
         ("ProtoChatMessage", "session_id"),
         ("ProtoChatMessage", "created_at"),
-        ("ProtoChatMessage", "username"),
     ]
     for label, prop in range_indexes:
         _safe(

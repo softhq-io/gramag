@@ -1,10 +1,17 @@
 """Superadmin-only user and client management API."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
 
 from auth import require_superadmin
-from user_service import create_user, list_clients, list_users, reset_password, update_user
+from user_service import (
+    create_user,
+    delete_user,
+    list_clients,
+    list_users,
+    reset_password,
+    update_user,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -50,6 +57,12 @@ def edit_user(
 ):
     changes = req.model_dump(exclude_unset=True)
     return update_user(user_id, changes, actor_id=admin["id"])
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def remove_user(user_id: str, admin: dict = Depends(require_superadmin)):
+    delete_user(user_id, actor_id=admin["id"])
+    return Response(status_code=204)
 
 
 @router.post("/users/{user_id}/reset-password")

@@ -19,6 +19,7 @@ import user_service
 import proto_server
 from proto import chat_store
 from proto import retriever as proto_retriever
+from proto import router as proto_router
 
 
 class QueryResult:
@@ -211,6 +212,44 @@ class UserLifecycleTests(unittest.TestCase):
                 )
         self.assertEqual(ctx.exception.status_code, 409)
 
+    def test_user_cannot_delete_own_account(self):
+        current = principal("superadmin")
+        with patch.object(user_service, "load_user", return_value=current):
+            with self.assertRaises(HTTPException) as ctx:
+                user_service.delete_user(current["id"], actor_id=current["id"])
+        self.assertEqual(ctx.exception.status_code, 409)
+
+    def test_last_superadmin_cannot_be_deleted(self):
+        target = {**principal("superadmin"), "id": "user_b"}
+        with patch.object(user_service, "load_user", return_value=target), \
+             patch.object(user_service.db, "write", return_value=QueryResult()) as write, \
+             patch.object(chat_store, "anonymize_deleted_user") as anonymize:
+            with self.assertRaises(HTTPException) as ctx:
+                user_service.delete_user(target["id"], actor_id="user_a")
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("other_active_superadmins", write.call_args.args[0])
+        anonymize.assert_not_called()
+
+    def test_delete_user_scrubs_chats_and_removes_account_atomically(self):
+        target = {**principal("user", ["client_a"]), "id": "user_b"}
+        writes = [
+            QueryResult(["id"], [["user_b"]]),
+            QueryResult(["deleted"], [[True]]),
+        ]
+        with patch.object(user_service, "load_user", return_value=target), \
+             patch.object(chat_store, "anonymize_deleted_user") as anonymize, \
+             patch.object(user_service.db, "write", side_effect=writes) as write:
+            user_service.delete_user(target["id"], actor_id="user_a")
+        anonymize.assert_called_once_with("user_b")
+        reserve_cypher = write.call_args_list[0].args[0]
+        delete_cypher, params = write.call_args_list[1].args
+        self.assertIn("other_active_superadmins", reserve_cypher)
+        self.assertIn("u.active = false", reserve_cypher)
+        self.assertIn("DETACH DELETE u", delete_cypher)
+        self.assertIn("action: 'user_deleted'", delete_cypher)
+        self.assertEqual(params["details"], '{"role": "user"}')
+        self.assertNotIn("a@example.com", str(params))
+
     def test_regular_user_assignments_are_validated(self):
         current = principal("user", ["client_a"])
         with patch.object(user_service, "load_user", return_value=current), \
@@ -351,6 +390,7 @@ class RetrievalIsolationTests(unittest.TestCase):
             result = chat_store.retrieve_memory(
                 query="fault",
                 session={"id": "chat_1", "machine_slug": None},
+                user=principal("user", ["client_a"]),
             )
         self.assertEqual(result, [])
         embedding.assert_not_called()
@@ -368,10 +408,154 @@ class RetrievalIsolationTests(unittest.TestCase):
             chat_store.retrieve_memory(
                 query="fault",
                 session={"id": "chat_1", "machine_slug": "machine_x"},
+                user=principal("user", ["client_a"]),
             )
         self.assertEqual(captured["params"]["machine_slug"], "machine_x")
         self.assertIn("s.machine_slug = $machine_slug", captured["cypher"])
+        self.assertIn("s.created_by_id = $user_id", captured["cypher"])
+        self.assertNotIn("msg.username", captured["cypher"])
         self.assertNotIn("s.customer =", captured["cypher"])
+
+
+class ChatPrivacyTests(unittest.TestCase):
+    def test_client_chat_listing_requires_ownership_and_machine_grant(self):
+        captured = {}
+
+        def query(cypher, params):
+            captured["cypher"] = cypher
+            captured["params"] = params
+            return QueryResult()
+
+        with patch.object(chat_store.proto_db, "query", side_effect=query):
+            chat_store.list_sessions(
+                machine_slug="machine_x",
+                customer="Client A",
+                user=principal("user", ["client_a"]),
+            )
+        self.assertIn("s.created_by_id = $user_id", captured["cypher"])
+        self.assertIn("m.erp_customer_id IN $client_ids", captured["cypher"])
+        self.assertIn("s.machine_slug IS NULL", captured["cypher"])
+        self.assertNotIn("OR m.slug IS NULL", captured["cypher"])
+        self.assertFalse(captured["params"]["all_clients"])
+
+    def test_chat_authorization_is_owner_scoped_for_client_users(self):
+        captured = {}
+
+        def query(cypher, params):
+            captured["cypher"] = cypher
+            captured["params"] = params
+            return QueryResult()
+
+        with patch.object(authorization.proto_db, "query", side_effect=query):
+            with self.assertRaises(HTTPException) as ctx:
+                authorization.require_proto_chat(
+                    principal("user", ["client_a"]),
+                    "someone_elses_chat",
+                )
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertIn("s.created_by_id = $user_id", captured["cypher"])
+        self.assertIn("s.machine_slug IS NULL", captured["cypher"])
+        self.assertNotIn("OR m.slug IS NULL", captured["cypher"])
+        self.assertEqual(captured["params"]["user_id"], "user_a")
+
+    def test_technical_user_can_read_anonymous_cross_user_chat(self):
+        result = QueryResult(
+            [
+                "id", "machine_slug", "client_id", "customer", "title",
+                "created_at", "updated_at", "created_by_id", "owned_by_me",
+                "isolation_version", "message_count", "last_message_at",
+            ],
+            [[
+                "chat_b", "machine_x", "client_a", "Client A", "Fault",
+                "now", "now", "user_b", False, 3, 2, "now",
+            ]],
+        )
+        with patch.object(authorization.proto_db, "query", return_value=result):
+            chat = authorization.require_proto_chat(principal("all_clients"), "chat_b")
+        self.assertFalse(chat["owned_by_me"])
+        self.assertNotIn("created_by", chat)
+
+    def test_technical_user_cannot_append_to_another_users_chat(self):
+        session = {
+            "id": "chat_b",
+            "machine_slug": "machine_x",
+            "owned_by_me": False,
+            "isolation_version": 3,
+        }
+        with patch.object(proto_router, "require_proto_chat", return_value=session), \
+             patch.object(proto_router, "append_message") as append:
+            with self.assertRaises(HTTPException) as ctx:
+                proto_router.chat_message(
+                    "chat_b",
+                    proto_router.ProtoChatMessageRequest(text="test"),
+                    current_user=principal("all_clients"),
+                )
+        self.assertEqual(ctx.exception.status_code, 403)
+        append.assert_not_called()
+
+    def test_public_messages_never_return_identity_fields(self):
+        result = QueryResult(
+            ["id", "session_id", "role", "text", "created_at", "model", "citations_json", "hits_json"],
+            [["msg_1", "chat_1", "user", "fault", "now", None, "[]", "[]"]],
+        )
+        with patch.object(chat_store.proto_db, "query", return_value=result):
+            message = chat_store.list_messages("chat_1")[0]
+        self.assertNotIn("username", message)
+        self.assertNotIn("user_role", message)
+
+    def test_new_sessions_store_only_opaque_owner_id(self):
+        captured = []
+
+        def write(cypher, params=None):
+            captured.append((cypher, params or {}))
+            return QueryResult()
+
+        with patch.object(chat_store.proto_db, "write", side_effect=write), \
+             patch.object(chat_store, "get_session", return_value={"id": "chat_fixed", "owned_by_me": True}), \
+             patch.object(chat_store, "_new_id", return_value="chat_fixed"):
+            chat_store.create_session(
+                machine_slug=None,
+                customer=None,
+                client_id=None,
+                title="Test",
+                user=principal("user", ["client_a"]),
+            )
+        cypher, params = captured[0]
+        self.assertNotIn("created_by:", cypher)
+        self.assertNotIn("username", params)
+        self.assertIn("isolation_version: 3", cypher)
+
+    def test_anonymization_migration_is_idempotent_and_preserves_content(self):
+        results = [
+            QueryResult(["changed"], [[2]]),
+            QueryResult(["changed"], [[4]]),
+            QueryResult(["changed"], [[0]]),
+            QueryResult(["changed"], [[0]]),
+        ]
+        with patch.object(chat_store.proto_db, "write", side_effect=results) as write:
+            first = chat_store.anonymize_chat_authors()
+            second = chat_store.anonymize_chat_authors()
+        self.assertEqual(first, {"sessions": 2, "messages": 4})
+        self.assertEqual(second, {"sessions": 0, "messages": 0})
+        cypher = "\n".join(call.args[0] for call in write.call_args_list)
+        self.assertIn("REMOVE s.created_by", cypher)
+        self.assertIn("REMOVE msg.username, msg.user_role", cypher)
+        self.assertNotIn("DELETE msg", cypher)
+
+    def test_deleted_user_chat_anonymization_removes_owner_link(self):
+        with patch.object(chat_store.proto_db, "write", return_value=QueryResult()) as write:
+            chat_store.anonymize_deleted_user("user_b")
+        self.assertEqual(write.call_count, 2)
+        messages_cypher = write.call_args_list[0].args[0]
+        session_cypher = write.call_args_list[1].args[0]
+        self.assertIn("REMOVE msg.username, msg.user_role", messages_cypher)
+        self.assertIn("REMOVE s.created_by, s.created_by_id", session_cypher)
+
+    def test_privacy_migration_failure_blocks_startup(self):
+        with patch.object(proto_server.proto_db, "connect"), \
+             patch.object(chat_store, "anonymize_chat_authors", side_effect=RuntimeError("boom")):
+            with self.assertRaisesRegex(RuntimeError, "refusing to start"):
+                proto_server.startup()
 
 
 class RouteProtectionTests(unittest.TestCase):

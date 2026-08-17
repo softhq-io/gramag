@@ -165,11 +165,10 @@ def _format_transcript(messages: list[dict], limit: int = 14) -> str:
     lines = []
     for msg in messages[-limit:]:
         role = "User" if msg.get("role") == "user" else "Assistant"
-        user = msg.get("username") or "unknown"
         text = (msg.get("text") or "").strip()
         if len(text) > 2500:
             text = text[:2500] + "\n[TRUNCATED]"
-        lines.append(f"{role} ({user}, {msg.get('created_at') or '?'}):\n{text}")
+        lines.append(f"{role} ({msg.get('created_at') or '?'}):\n{text}")
     return "\n\n---\n\n".join(lines)
 
 
@@ -179,14 +178,13 @@ def _format_memory(memories: list[dict]) -> str:
     lines = []
     for i, msg in enumerate(memories, start=1):
         role = "User" if msg.get("role") == "user" else "Assistant"
-        user = msg.get("username") or "unknown"
         score = msg.get("score")
         score_text = f", similarity {float(score):.3f}" if score is not None else ""
         text = (msg.get("text") or "").strip()
         if len(text) > 1800:
             text = text[:1800] + "\n[TRUNCATED]"
         lines.append(
-            f"[MEMORY {i}] {role} by {user} in \"{msg.get('session_title') or 'chat'}\""
+            f"[MEMORY {i}] {role} in \"{msg.get('session_title') or 'chat'}\""
             f" ({msg.get('created_at') or '?'}{score_text}):\n{text}"
         )
     return "\n\n---\n\n".join(lines)

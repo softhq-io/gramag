@@ -7,7 +7,7 @@ export function AppLayout() {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
   const location = useLocation()
-  const isProto = location.pathname === '/proto'
+  const isProto = location.pathname.startsWith('/proto')
 
   return (
     <div className={`app ${isProto ? 'app-proto' : ''}`}>

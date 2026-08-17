@@ -3,6 +3,7 @@
 import html
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
@@ -61,9 +62,9 @@ def ask(q: ProtoQuery, user: dict = Depends(get_current_user)):
         title=q.query,
         user=user,
     )
-    append_message(session_id=session["id"], role="user", text=q.query, user=user)
+    append_message(session_id=session["id"], role="user", text=q.query)
     messages = list_messages(session["id"])
-    memories = retrieve_memory(query=q.query, session=session)
+    memories = retrieve_memory(query=q.query, session=session, user=user)
     result = generate_chat_answer(
         q.query,
         transcript=messages,
@@ -79,7 +80,6 @@ def ask(q: ProtoQuery, user: dict = Depends(get_current_user)):
         session_id=session["id"],
         role="assistant",
         text=result["answer"],
-        user={"username": "assistant", "role": "assistant"},
         model=result.get("model"),
         citations=result.get("citations"),
         hits=result.get("hits"),
@@ -120,8 +120,11 @@ def chats(
 
 @router.get("/chats/{chat_id}")
 def chat(chat_id: str, current_user: dict = Depends(get_current_user)):
-    session = require_proto_chat(current_user, chat_id)
-    return {"session": session, "messages": list_messages(chat_id)}
+    require_proto_chat(current_user, chat_id)
+    return {
+        "session": get_session(chat_id, user=current_user),
+        "messages": list_messages(chat_id),
+    }
 
 
 @router.post("/chats/{chat_id}/messages")
@@ -133,6 +136,8 @@ def chat_message(
     session = require_proto_chat(current_user, chat_id)
     if int(session.get("isolation_version") or 0) < 2:
         raise HTTPException(409, "Legacy chats are read-only; create a new machine-scoped chat")
+    if not session.get("owned_by_me"):
+        raise HTTPException(403, "Other users' chats are read-only")
     text = req.text.strip()
     if not text:
         raise HTTPException(400, "Message text is required")
@@ -141,10 +146,9 @@ def chat_message(
         session_id=chat_id,
         role="user",
         text=text,
-        user=current_user,
     )
     transcript = list_messages(chat_id)
-    memories = retrieve_memory(query=text, session=session)
+    memories = retrieve_memory(query=text, session=session, user=current_user)
     result = generate_chat_answer(
         text,
         transcript=transcript,
@@ -160,13 +164,12 @@ def chat_message(
         session_id=chat_id,
         role="assistant",
         text=result["answer"],
-        user={"username": "assistant", "role": "assistant"},
         model=result.get("model"),
         citations=result.get("citations"),
         hits=result.get("hits"),
     )
     return {
-        "session": get_session(chat_id),
+        "session": get_session(chat_id, user=current_user),
         "user_message": user_message,
         "assistant_message": assistant_message,
         "answer": result["answer"],
@@ -296,14 +299,15 @@ def document_viewer(
     """
     document = require_proto_document(current_user, doc_id)
     name = html.escape(document.get("name") or "document")
+    safe_doc_id = quote(doc_id, safe="")
     kind = document.get("kind")
     page = max(1, int(page))
-    src = f"/api/proto/document/{doc_id}#page={page}&zoom=page-fit&view=FitH"
+    src = f"/api/proto/document/{safe_doc_id}#page={page}&zoom=page-fit&view=FitH"
 
     if kind != "pdf":
         # Non-PDF: just redirect to raw file
         return HTMLResponse(
-            f"<!doctype html><meta http-equiv='refresh' content='0; url=/api/proto/document/{doc_id}'>"
+            f"<!doctype html><meta http-equiv='refresh' content='0; url=/api/proto/document/{safe_doc_id}'>"
         )
 
     return HTMLResponse(f"""<!doctype html>
@@ -312,18 +316,29 @@ def document_viewer(
   <meta charset="utf-8">
   <title>{name} — p.{page}</title>
   <style>
-    html, body {{ margin: 0; padding: 0; height: 100%; background: #1b1f28; color: #e1e4e8; font-family: -apple-system, sans-serif; }}
-    header {{ padding: 8px 16px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }}
-    header .title {{ font-size: 13px; color: #c9d1d9; }}
-    header a {{ color: #58a6ff; text-decoration: none; font-size: 12px; }}
-    header a:hover {{ text-decoration: underline; }}
-    iframe {{ width: 100%; height: calc(100vh - 40px); border: 0; background: #fff; }}
+    * {{ box-sizing: border-box; }}
+    html, body {{ margin: 0; padding: 0; height: 100%; background: #1b1f28; color: #e1e4e8; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }}
+    body {{ display: grid; min-height: 100dvh; grid-template-rows: auto minmax(0, 1fr); }}
+    header {{ position: sticky; z-index: 10; top: 0; display: grid; min-height: 64px; padding: 8px 12px; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; border-bottom: 1px solid #30363d; background: #161b22; }}
+    header .title {{ min-width: 0; overflow: hidden; color: #c9d1d9; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }}
+    header button, header a {{ display: inline-flex; min-width: 44px; min-height: 44px; padding: 0 13px; align-items: center; justify-content: center; border: 1px solid #3b4655; border-radius: 9px; background: #202936; color: #d9e2ec; cursor: pointer; font: inherit; font-size: 12px; font-weight: 650; text-decoration: none; }}
+    header a {{ border-color: #12bdd5; background: rgba(18, 189, 213, 0.14); color: #5de4f4; }}
+    header button:hover, header button:focus-visible, header a:hover, header a:focus-visible {{ border-color: #5de4f4; outline: none; }}
+    iframe {{ width: 100%; height: 100%; min-height: 0; border: 0; background: #fff; }}
+    @media (max-width: 620px) {{
+      header {{ min-height: 70px; padding: 8px; gap: 7px; }}
+      header button {{ width: 44px; padding: 0; font-size: 0; }}
+      header button::before {{ content: '←'; font-size: 20px; }}
+      header a {{ padding: 0 11px; }}
+      header a .wide {{ display: none; }}
+    }}
   </style>
 </head>
 <body>
   <header>
-    <span class="title">{name} — page {page}</span>
-    <a href="/api/proto/document/{doc_id}" target="_blank">open raw ↗</a>
+    <button type="button" onclick="if (history.length > 1) history.back(); else location.href='/einsatzplaner/proto'">Zurück</button>
+    <span class="title" title="{name}">{name} — Seite {page}</span>
+    <a href="/api/proto/document/{safe_doc_id}"><span class="wide">Original-</span>PDF öffnen</a>
   </header>
   <iframe src="{src}" title="PDF"></iframe>
 </body>

@@ -294,6 +294,77 @@ def update_user(user_id: str, changes: dict, *, actor_id: str) -> dict:
     return serialize_user(load_user(user_id) or {})
 
 
+def delete_user(user_id: str, *, actor_id: str) -> None:
+    current = load_user(user_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user_id == actor_id:
+        raise HTTPException(status_code=409, detail="You cannot delete your own account")
+
+    from proto.chat_store import anonymize_deleted_user
+
+    if not current.get("deletion_pending"):
+        reserved = result_single(db.write(
+            """
+            MATCH (u:User {id: $id})
+            OPTIONAL MATCH (other:User {role: 'superadmin'})
+            WHERE coalesce(other.active, true) AND other.id <> u.id
+            WITH u, count(other) AS other_active_superadmins
+            WHERE u.role <> 'superadmin' OR other_active_superadmins > 0
+            SET u.deletion_pending = true,
+                u.active = false,
+                u.auth_version = coalesce(u.auth_version, 0) + 1,
+                u.updated_at = $created_at
+            RETURN u.id AS id
+            """,
+            {"id": user_id, "created_at": now_iso()},
+        ))
+        if not reserved:
+            raise HTTPException(
+                status_code=409,
+                detail="The last active superadmin cannot be deleted",
+            )
+
+    try:
+        anonymize_deleted_user(user_id)
+    except Exception:
+        if not current.get("deletion_pending"):
+            db.write(
+                """
+                MATCH (u:User {id: $id})
+                WHERE coalesce(u.deletion_pending, false)
+                SET u.active = $active,
+                    u.auth_version = coalesce(u.auth_version, 0) + 1,
+                    u.updated_at = $updated_at
+                REMOVE u.deletion_pending
+                """,
+                {"id": user_id, "active": bool(current.get("active", True)), "updated_at": now_iso()},
+            )
+        raise
+
+    deleted = result_single(db.write(
+        """
+        MATCH (u:User {id: $id})
+        WHERE coalesce(u.deletion_pending, false)
+        DETACH DELETE u
+        CREATE (:UserAuditEvent {
+          id: $audit_id, actor_user_id: $actor, target_user_id: $id,
+          action: 'user_deleted', details_json: $details, created_at: $created_at
+        })
+        RETURN true AS deleted
+        """,
+        {
+            "id": user_id,
+            "audit_id": f"audit_{uuid.uuid4().hex}",
+            "actor": actor_id,
+            "details": json.dumps({"role": current["role"]}, sort_keys=True),
+            "created_at": now_iso(),
+        },
+    ))
+    if not deleted:
+        raise HTTPException(status_code=409, detail="User deletion could not be finalized")
+
+
 def reset_password(user_id: str, *, actor_id: str) -> str:
     user = load_user(user_id)
     if not user:

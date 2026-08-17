@@ -91,6 +91,7 @@ def load_user(identifier: str, *, include_credentials: bool = False) -> dict | N
                    u.role AS role,
                    coalesce(u.active, true) AS active,
                    coalesce(u.must_change_password, false) AS must_change_password,
+                   coalesce(u.deletion_pending, false) AS deletion_pending,
                    coalesce(u.auth_version, 0) AS auth_version,
                    coalesce(u.failed_login_count, 0) AS failed_login_count,
                    u.locked_until AS locked_until,

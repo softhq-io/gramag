@@ -114,16 +114,18 @@ def require_proto_chat(user: dict, chat_id: str) -> dict:
             WHERE m.slug = s.machine_slug
             WITH s, m
             WHERE $all_clients
-               OR (coalesce(s.isolation_version, 0) >= 2 AND
-                   ((m.slug IS NOT NULL AND m.erp_customer_id IN $client_ids)
-                    OR (m.slug IS NULL AND s.created_by_id = $user_id)))
+               OR (coalesce(s.isolation_version, 0) >= 2
+                   AND s.created_by_id = $user_id
+                   AND ((m.slug IS NOT NULL AND m.erp_customer_id IN $client_ids)
+                        OR s.machine_slug IS NULL))
             OPTIONAL MATCH (s)-[:HAS_MESSAGE]->(msg:ProtoChatMessage)
             WITH s, count(msg) AS message_count, max(msg.created_at) AS last_message_at
             RETURN s.id AS id, s.machine_slug AS machine_slug,
                    s.client_id AS client_id, s.customer AS customer,
                    s.title AS title, s.created_at AS created_at,
-                   s.updated_at AS updated_at, s.created_by AS created_by,
+                   s.updated_at AS updated_at,
                    s.created_by_id AS created_by_id,
+                   s.created_by_id = $user_id AS owned_by_me,
                    coalesce(s.isolation_version, 0) AS isolation_version,
                    message_count, last_message_at
             """,

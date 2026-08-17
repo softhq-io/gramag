@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   createUser,
+  deleteUser,
   listClients,
   listUsers,
   resetUserPassword,
@@ -9,10 +10,12 @@ import {
   type AdminUser,
 } from '../api/admin'
 import type { UserRole } from '../api/auth'
+import { useAuth } from '../hooks/useAuth'
 
 const ROLES: UserRole[] = ['user', 'all_clients', 'superadmin']
 
 export function UsersAdminPage() {
+  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [clients, setClients] = useState<AdminClient[]>([])
   const [error, setError] = useState('')
@@ -22,6 +25,7 @@ export function UsersAdminPage() {
   const [role, setRole] = useState<UserRole>('user')
   const [clientIds, setClientIds] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const clientsById = useMemo(
     () => new Map(clients.map(client => [client.id, client])),
@@ -90,6 +94,24 @@ export function UsersAdminPage() {
     }
   }
 
+  async function remove(user: AdminUser) {
+    if (user.id === currentUser?.id) return
+    const confirmed = window.confirm(
+      `Delete ${user.identifier} permanently?\n\nThis removes the login and access grants immediately. This action cannot be undone. Existing chats are retained anonymously.`,
+    )
+    if (!confirmed) return
+    setDeletingId(user.id)
+    setError('')
+    try {
+      await deleteUser(user.id)
+      setUsers(current => current.filter(item => item.id !== user.id))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   function edit(id: string, changes: Partial<AdminUser>) {
     setUsers(current => current.map(user => user.id === id ? { ...user, ...changes } : user))
   }
@@ -152,8 +174,17 @@ export function UsersAdminPage() {
               )}
             </div>
             <div className="admin-user-actions">
-              <button onClick={() => save(user)}>Save</button>
-              <button className="secondary" onClick={() => reset(user)}>Reset password</button>
+              <button type="button" onClick={() => save(user)}>Save</button>
+              <button type="button" className="secondary" onClick={() => reset(user)}>Reset password</button>
+              <button
+                type="button"
+                className="danger"
+                disabled={deletingId === user.id || user.id === currentUser?.id}
+                title={user.id === currentUser?.id ? 'You cannot delete your own account' : undefined}
+                onClick={() => remove(user)}
+              >
+                {deletingId === user.id ? 'Deleting…' : 'Delete permanently'}
+              </button>
             </div>
             <div className="admin-user-grants">
               {user.role === 'user' && user.client_ids.map(id => clientsById.get(id)?.name || id).join(', ')}

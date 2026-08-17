@@ -30,7 +30,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     if (refreshed) {
       headers['Authorization'] = `Bearer ${localStorage.getItem('access_token')}`
       const retry = await fetch(`${BASE}${path}`, { ...opts, headers })
-      if (retry.ok) return retry.json()
+      if (retry.ok) return parseResponse<T>(retry)
     }
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
@@ -49,7 +49,12 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     throw new ApiError(message, res.status, detail?.code, retryAfter)
   }
 
-  return res.json()
+  return parseResponse<T>(res)
+}
+
+function parseResponse<T>(response: Response): Promise<T> {
+  if (response.status === 204) return Promise.resolve(undefined as T)
+  return response.json() as Promise<T>
 }
 
 async function tryRefresh(): Promise<boolean> {
@@ -80,4 +85,8 @@ export function post<T>(path: string, body: unknown) {
 
 export function patch<T>(path: string, body: unknown) {
   return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+export function del(path: string) {
+  return request<void>(path, { method: 'DELETE' })
 }

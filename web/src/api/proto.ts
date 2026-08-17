@@ -62,7 +62,7 @@ export interface ProtoChatSession {
   title: string
   created_at: string
   updated_at: string
-  created_by: string
+  owned_by_me: boolean
   message_count?: number
   last_message_at?: string | null
 }
@@ -73,8 +73,6 @@ export interface ProtoChatMessage {
   role: 'user' | 'assistant'
   text: string
   created_at: string
-  username?: string | null
-  user_role?: string | null
   model?: string | null
   citations?: ProtoCitation[]
   hits?: ProtoHit[]
