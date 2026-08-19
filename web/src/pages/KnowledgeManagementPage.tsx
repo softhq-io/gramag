@@ -47,6 +47,21 @@ export function KnowledgeManagementPage() {
 
   const selectedClient = clients.find(item => item.id === clientId) || null
   const selectedMachine = machines.find(item => item.erp_id === machineId) || null
+  const orderedMachines = useMemo(
+    () => [...machines].sort((left, right) => (
+      Number(right.selected) - Number(left.selected)
+      || (left.name || left.erp_id).localeCompare(right.name || right.erp_id)
+    )),
+    [machines],
+  )
+  const selectedMachineCount = machines.filter(machine => machine.selected).length
+  const uploadButtonLabel = busy
+    ? 'Uploading…'
+    : files.length === 0
+      ? 'Choose files to continue'
+      : !category.trim()
+        ? 'Add a category to continue'
+        : `Upload and ingest ${files.length} file${files.length === 1 ? '' : 's'}`
 
   const loadClients = useCallback(async () => {
     const rows = await listKnowledgeClients(Boolean(isAdmin), clientQuery)
@@ -220,7 +235,10 @@ export function KnowledgeManagementPage() {
       <div className="knowledge-columns">
         <section className="knowledge-panel">
           <div className="knowledge-panel-heading">
-            <div><span>1</span><strong>Clients</strong></div>
+            <div className="knowledge-panel-title">
+              <div><span>1</span><strong>Clients</strong></div>
+              <small>{clients.length} shown</small>
+            </div>
             <input value={clientQuery} onChange={event => setClientQuery(event.target.value)} placeholder="Search CRM clients" />
           </div>
           <div className="knowledge-list">
@@ -230,11 +248,18 @@ export function KnowledgeManagementPage() {
                   setClientId(client.id)
                   setMachineId('')
                 }}>
-                  <strong>{client.name || client.id}</strong>
-                  <small>{client.machine_count} CRM machines · {client.selected_machine_count} selected</small>
+                  <strong title={client.name || client.id}>{client.name || client.id}</strong>
+                  <small title={`CRM client ${client.id}`}>
+                    CRM {client.id} · {client.machine_count} machines · {client.selected_machine_count} selected
+                  </small>
                 </button>
                 {isAdmin && (
-                  <button disabled={busy} className={`knowledge-toggle ${client.active ? 'on' : ''}`} onClick={() => toggleClient(client)}>
+                  <button
+                    aria-label={`${client.active ? 'Deactivate' : 'Activate'} ${client.name || client.id}`}
+                    disabled={busy}
+                    className={`knowledge-toggle ${client.active ? 'on' : ''}`}
+                    onClick={() => toggleClient(client)}
+                  >
                     {client.active ? 'Active' : 'Activate'}
                   </button>
                 )}
@@ -246,18 +271,26 @@ export function KnowledgeManagementPage() {
 
         <section className="knowledge-panel">
           <div className="knowledge-panel-heading">
-            <div><span>2</span><strong>Machines</strong></div>
+            <div className="knowledge-panel-title">
+              <div><span>2</span><strong>Machines</strong></div>
+              <small>{selectedMachineCount} selected</small>
+            </div>
             <input disabled={!clientId} value={machineQuery} onChange={event => setMachineQuery(event.target.value)} placeholder="Search machines" />
           </div>
           <div className="knowledge-list">
             {!selectedClient && <div className="knowledge-empty">Choose an active client.</div>}
-            {machines.map(machine => (
+            {orderedMachines.map(machine => (
               <div className={`knowledge-row ${machine.erp_id === machineId ? 'selected' : ''}`} key={machine.erp_id}>
                 <button className="knowledge-row-main" disabled={busy || !machine.selected} onClick={() => setMachineId(machine.erp_id)}>
-                  <strong>{machine.name || machine.erp_id}</strong>
+                  <strong className="knowledge-machine-name" title={machine.name || machine.erp_id}>{machine.name || machine.erp_id}</strong>
                   <small>{machine.serial || machine.number || (machine.legacy ? 'Legacy grouped machine' : `CRM ${machine.erp_id}`)} · {machine.ready_document_count} ready</small>
                 </button>
-                <button disabled={busy} className={`knowledge-toggle ${machine.selected ? 'on' : ''}`} onClick={() => toggleMachine(machine)}>
+                <button
+                  aria-label={`${machine.selected ? 'Deselect' : 'Select'} ${machine.name || machine.erp_id}`}
+                  disabled={busy}
+                  className={`knowledge-toggle ${machine.selected ? 'on' : ''}`}
+                  onClick={() => toggleMachine(machine)}
+                >
                   {machine.selected ? 'Selected' : 'Select'}
                 </button>
               </div>
@@ -267,8 +300,11 @@ export function KnowledgeManagementPage() {
 
         <section className="knowledge-panel knowledge-documents-panel">
           <div className="knowledge-panel-heading">
-            <div><span>3</span><strong>Documents</strong></div>
-            <small>{selectedMachine?.name || 'Choose a selected machine'}</small>
+            <div className="knowledge-panel-title">
+              <div><span>3</span><strong>Documents</strong></div>
+              <small>{selectedMachine ? `${documents.length} total` : ''}</small>
+            </div>
+            <small title={selectedMachine?.name || undefined}>{selectedMachine?.name || 'Choose a selected machine'}</small>
           </div>
 
           {selectedMachine && (
@@ -293,7 +329,7 @@ export function KnowledgeManagementPage() {
                 <span>PDF, images or TXT · maximum 250 MB each</span>
               </label>
               <button className="knowledge-upload-button" disabled={busy || !category.trim() || files.length === 0} onClick={uploadBatch}>
-                {busy ? 'Uploading…' : 'Upload and ingest'}
+                {uploadButtonLabel}
               </button>
               {uploadErrors.map(message => <div className="knowledge-file-error" key={message}>{message}</div>)}
             </div>
@@ -319,9 +355,12 @@ export function KnowledgeManagementPage() {
               </article>
             ))}
             {documents.map(document => (
-              <article className="knowledge-document" key={document.id}>
+              <article className={`knowledge-document ${document.status === 'ready' ? 'compact' : ''}`} key={document.id}>
                 <div className="knowledge-document-title">
-                  <div><strong>{document.name}</strong><small>{document.category} · {formatBytes(document.size)} · {document.source === 'upload' ? 'Uploaded' : 'Legacy SharePoint'}</small></div>
+                  <div>
+                    <strong title={document.name}>{document.name}</strong>
+                    <small>{document.category} · {formatBytes(document.size)} · {document.source === 'upload' ? 'Uploaded' : 'Legacy SharePoint'}</small>
+                  </div>
                   <span className={`knowledge-status ${document.status}`}>{document.status}</span>
                 </div>
                 {!TERMINAL.has(document.status) && document.status !== 'deleting' && (
@@ -332,10 +371,10 @@ export function KnowledgeManagementPage() {
                 )}
                 {document.error_message && <div className="knowledge-file-error">{document.error_message}</div>}
                 <div className="knowledge-document-actions">
-                  {document.status === 'ready' && <a href={`/api/proto/view/${encodeURIComponent(document.id)}`} target="_blank" rel="noreferrer">Open</a>}
-                  {document.status === 'ready' && <a href={`/api/proto/document/${encodeURIComponent(document.id)}?download=true`}>Download</a>}
-                  {document.status === 'failed' && document.phase !== 'delete_failed' && <button onClick={() => retry(document)}>Retry</button>}
-                  <button className="danger" disabled={document.status === 'deleting'} onClick={() => remove(document)}>Delete</button>
+                  {document.status === 'ready' && <a aria-label={`Open ${document.name}`} href={`/api/proto/view/${encodeURIComponent(document.id)}`} target="_blank" rel="noreferrer">Open</a>}
+                  {document.status === 'ready' && <a aria-label={`Download ${document.name}`} href={`/api/proto/document/${encodeURIComponent(document.id)}?download=true`}>Download</a>}
+                  {document.status === 'failed' && document.phase !== 'delete_failed' && <button aria-label={`Retry ${document.name}`} onClick={() => retry(document)}>Retry</button>}
+                  <button aria-label={`Permanently delete ${document.name}`} className="danger" disabled={document.status === 'deleting'} onClick={() => remove(document)}>Delete</button>
                 </div>
               </article>
             ))}
