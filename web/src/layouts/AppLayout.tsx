@@ -20,6 +20,9 @@ export function AppLayout() {
           </span>
         </Link>
         <div className="topbar-right">
+          {(user?.role === 'superadmin' || user?.role === 'all_clients') && (
+            <Link to="/knowledge" className="topbar-nav-link">Knowledge</Link>
+          )}
           {user?.role === 'superadmin' && (
             <>
               <Link to="/fleet" className="topbar-nav-link">Fleet</Link>

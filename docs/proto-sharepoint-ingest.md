@@ -1,5 +1,9 @@
 # Proto SharePoint Ingest Runbook
 
+> Legacy/manual workflow: routine ingestion now uses the CRM-driven per-document
+> process in `managed-knowledge-ingest.md`. Do not enable the SharePoint schedule
+> while UI-managed deletion is active.
+
 This document describes the current durable Proto KB ingest process for
 SharePoint customer folders. The current production-like proof run is
 `Birkhäuser + GBC AG` on staging; the same process is intended for the rest of

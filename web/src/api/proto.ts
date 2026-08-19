@@ -7,6 +7,8 @@ export interface ProtoMachine {
   model: string | null
   serial: string | null
   customer?: string | null
+  client_id?: string | null
+  erp_id?: string | null
   docs: number
   pdfs: number
   imgs: number
@@ -101,6 +103,7 @@ export function listProtoMachines(): Promise<ProtoMachine[]> {
 
 export interface CustomerOverview {
   customer: { name: string; tagline: string; machine_count: number }
+  clients: { id: string; name: string; machine_count: number }[]
   stats: {
     machines: number
     documents: number

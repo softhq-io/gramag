@@ -40,13 +40,16 @@ def _vector_search(
             CALL db.idx.vector.queryNodes(
                 '{label}', 'embedding', $candidate_k, vecf32($emb)
             ) YIELD node, score
-            OPTIONAL MATCH (m:Machine)-[:HAS_DOCUMENT]->(d:Document)
+            OPTIONAL MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)-[:HAS_DOCUMENT]->(d:Document)
             WHERE ((node:ManualSection AND d.id = node.document_id)
                 OR (node:ConfigFile AND (d)-[:HAS_CONFIG]->(node))
                 OR (node:ImageAsset AND (d)-[:HAS_IMAGE]->(node)))
             WITH node, score, m, d
             WHERE ($slug IS NULL OR m.slug = $slug)
               AND ($customer IS NULL OR coalesce(m.customer, '') = $customer)
+              AND coalesce(c.active, m.erp_customer_id IS NOT NULL)
+              AND coalesce(m.selected, m.erp_id IS NOT NULL OR m.erp_link_mode = 'group')
+              AND coalesce(d.status, 'ready') = 'ready'
               AND ($all_clients OR m.erp_customer_id IN $client_ids)
             RETURN node, score, m.slug AS machine_slug, m.folder AS machine_folder,
                    d.name AS doc_name, d.kind AS doc_kind, d.category AS category,
@@ -106,10 +109,13 @@ def _fetch_pages_direct(
     """Directly fetch ManualSections matching specific page numbers."""
     result = proto_db.query(
         """
-        MATCH (m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_SECTION]->(s:ManualSection)
+        MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_SECTION]->(s:ManualSection)
         WHERE s.page IN $pages
           AND ($slug IS NULL OR m.slug = $slug)
           AND ($customer IS NULL OR coalesce(m.customer, '') = $customer)
+          AND coalesce(c.active, m.erp_customer_id IS NOT NULL)
+          AND coalesce(m.selected, m.erp_id IS NOT NULL OR m.erp_link_mode = 'group')
+          AND coalesce(d.status, 'ready') = 'ready'
           AND ($all_clients OR m.erp_customer_id IN $client_ids)
         RETURN s, m.slug AS machine_slug, m.folder AS machine_folder,
                d.name AS doc_name, d.kind AS doc_kind, d.category AS category,
@@ -206,9 +212,12 @@ def _keyword_boost(
             """
             CALL db.idx.fulltext.queryNodes('ManualSection', $q)
             YIELD node AS s, score AS ft_score
-            MATCH (m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_SECTION]->(s)
+            MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_SECTION]->(s)
             WHERE ($slug IS NULL OR m.slug = $slug)
               AND ($customer IS NULL OR coalesce(m.customer, '') = $customer)
+              AND coalesce(c.active, m.erp_customer_id IS NOT NULL)
+              AND coalesce(m.selected, m.erp_id IS NOT NULL OR m.erp_link_mode = 'group')
+              AND coalesce(d.status, 'ready') = 'ready'
               AND ($all_clients OR m.erp_customer_id IN $client_ids)
             RETURN s, ft_score,
                    m.slug AS machine_slug, m.folder AS machine_folder,
@@ -337,19 +346,23 @@ def retrieve(query: str, *, top_k: int = 8, machine_slug: str | None = None,
 def list_machines(*, all_clients: bool = False, client_ids: list[str] | None = None) -> list[dict]:
     result = proto_db.query(
         """
-        MATCH (m:Machine)
-        WHERE $all_clients OR m.erp_customer_id IN $client_ids
+        MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)
+        WHERE coalesce(c.active, m.erp_customer_id IS NOT NULL)
+          AND coalesce(m.selected, m.erp_id IS NOT NULL OR m.erp_link_mode = 'group')
+          AND ($all_clients OR m.erp_customer_id IN $client_ids)
         OPTIONAL MATCH (m)-[:HAS_DOCUMENT]->(d:Document)
-        WITH m, count(DISTINCT d) AS docs,
+        WHERE coalesce(d.status, 'ready') = 'ready'
+        WITH c, m, count(DISTINCT d) AS docs,
              sum(CASE WHEN d.kind = 'pdf' THEN 1 ELSE 0 END) AS pdfs,
              sum(CASE WHEN d.kind = 'image' THEN 1 ELSE 0 END) AS imgs,
              sum(CASE WHEN d.kind = 'text' THEN 1 ELSE 0 END) AS txts
-        OPTIONAL MATCH (m)-[:HAS_DOCUMENT]->(:Document)-[:HAS_SECTION]->(s:ManualSection)
-        WITH m, docs, pdfs, imgs, txts, count(s) AS sections
-        OPTIONAL MATCH (c:Customer)-[:HAS_MACHINE]->(m)
+        OPTIONAL MATCH (m)-[:HAS_DOCUMENT]->(section_doc:Document)-[:HAS_SECTION]->(s:ManualSection)
+        WHERE coalesce(section_doc.status, 'ready') = 'ready'
+        WITH c, m, docs, pdfs, imgs, txts, count(s) AS sections
         RETURN m.slug AS slug, m.folder AS folder, m.type AS type,
                m.model AS model, m.serial AS serial,
-               coalesce(c.name, m.customer) AS customer,
+               coalesce(c.name, m.customer) AS customer, c.erp_id AS client_id,
+               m.erp_id AS erp_id,
                docs, pdfs, imgs, txts, sections
         ORDER BY customer, folder
         """,

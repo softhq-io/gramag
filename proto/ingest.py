@@ -277,7 +277,7 @@ def upsert_category(machine_slug: str, category: str) -> str:
 
 
 def upsert_document(machine_slug: str, cat_id: str, f: dict, kind: str) -> str:
-    doc_id = _id(machine_slug, f["rel"])
+    doc_id = f.get("document_id") or _id(machine_slug, f["rel"])
     proto_db.write(
         """
         MATCH (m:Machine {slug: $slug})
@@ -297,13 +297,14 @@ def upsert_document(machine_slug: str, cat_id: str, f: dict, kind: str) -> str:
     return doc_id
 
 
-def render_pdf_pages(pdf_path: Path, doc_id: str) -> list[dict]:
+def render_pdf_pages(pdf_path: Path, doc_id: str, progress=None) -> list[dict]:
     """Render each page to PNG, return list of {page, text, png_path}.
 
     png_path is stored as RELATIVE to PROTO_CACHE_DIR for portability.
     """
     out = []
     doc = fitz.open(pdf_path)
+    total = int(doc.page_count)
     for i, page in enumerate(doc, start=1):
         rel = Path("pages") / doc_id / f"p{i:04d}.png"
         abs_path = Path(PROTO_CACHE_DIR) / rel
@@ -312,6 +313,8 @@ def render_pdf_pages(pdf_path: Path, doc_id: str) -> list[dict]:
         pix.save(abs_path)
         text = page.get_text().strip()
         out.append({"page": i, "text": text, "png_path": str(rel)})
+        if progress:
+            progress("rendering", i, total)
     doc.close()
     return out
 
@@ -330,12 +333,13 @@ def _vision_for_page(p: dict, deep: bool, skip_vision_if_short: bool) -> tuple[i
 
 
 def ingest_pdf(machine_slug: str, cat_id: str, f: dict, *, deep: bool = False,
-               skip_vision_if_short: bool = True, workers: int = 8) -> int:
+               skip_vision_if_short: bool = True, workers: int = 8,
+               progress=None) -> int:
     doc_id = upsert_document(machine_slug, cat_id, f, "pdf")
     from proto import resolve_source
     pdf_path = Path(resolve_source(f["path"]))
     try:
-        pages = render_pdf_pages(pdf_path, doc_id)
+        pages = render_pdf_pages(pdf_path, doc_id, progress=progress)
     except Exception as e:
         raise PDFIngestError(f"render failed: {e}") from e
     clear_document_payload(doc_id)
@@ -350,10 +354,14 @@ def ingest_pdf(machine_slug: str, cat_id: str, f: dict, *, deep: bool = False,
             for fut in as_completed(futures):
                 page_no, desc = fut.result()
                 vision_map[page_no] = desc
+                if progress:
+                    progress("vision", len(vision_map), len(pages))
     else:
         for p in pages:
             page_no, desc = _vision_for_page(p, deep, skip_vision_if_short)
             vision_map[page_no] = desc
+            if progress:
+                progress("vision", len(vision_map), len(pages))
 
     sections = []
     for p in pages:
@@ -372,6 +380,8 @@ def ingest_pdf(machine_slug: str, cat_id: str, f: dict, *, deep: bool = False,
 
     # Batch embed merged content
     embeddings = generate_embeddings_batch([s["merged"] for s in sections])
+    if progress:
+        progress("embedding", len(embeddings), len(sections))
     if len(embeddings) != len(sections):
         raise PDFIngestError(
             f"embedding count mismatch: expected {len(sections)}, got {len(embeddings)}"
@@ -403,6 +413,8 @@ def ingest_pdf(machine_slug: str, cat_id: str, f: dict, *, deep: bool = False,
                 },
             )
             written += 1
+            if progress:
+                progress("indexing", written, len(sections))
         except Exception as e:
             print(f"      ! section write fail p{s['page']}: {str(e)[:120]}")
             raise PDFIngestError(f"section write failed p{s['page']}: {e}") from e

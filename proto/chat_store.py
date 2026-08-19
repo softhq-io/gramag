@@ -132,16 +132,18 @@ def list_sessions(
         proto_db.query(
             """
             MATCH (s:ProtoChatSession)
-            OPTIONAL MATCH (m:Machine)
+            OPTIONAL MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)
             WHERE m.slug = s.machine_slug
-            WITH s, m
+            WITH s, m, c
             WHERE ($machine_slug IS NULL OR s.machine_slug = $machine_slug)
               AND ($customer IS NULL OR coalesce(s.customer, '') = $customer)
-              AND ($all_clients
-                   OR (coalesce(s.isolation_version, 0) >= 2
+              AND ((s.machine_slug IS NULL AND $all_clients)
+                   OR (m.slug IS NOT NULL
+                       AND coalesce(c.active, m.erp_customer_id IS NOT NULL)
+                       AND coalesce(m.selected, m.erp_id IS NOT NULL OR m.erp_link_mode = 'group')
+                       AND ($all_clients OR (coalesce(s.isolation_version, 0) >= 2
                        AND s.created_by_id = $user_id
-                       AND ((m.slug IS NOT NULL AND m.erp_customer_id IN $client_ids)
-                            OR s.machine_slug IS NULL)))
+                       AND m.erp_customer_id IN $client_ids))))
             OPTIONAL MATCH (s)-[:HAS_MESSAGE]->(msg:ProtoChatMessage)
             WITH s, count(msg) AS message_count, max(msg.created_at) AS last_message_at
             RETURN s.id AS id,

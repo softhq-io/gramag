@@ -15,6 +15,7 @@ from auth import get_current_user
 from mission_router import router as mission_router
 from fleet_router import router as fleet_router
 from proto.router import router as proto_router
+from knowledge_router import router as knowledge_router
 
 app = FastAPI(title="Gramag Knowledge Assistant")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -24,6 +25,7 @@ app.include_router(admin_router)
 app.include_router(mission_router)
 app.include_router(fleet_router)
 app.include_router(proto_router)
+app.include_router(knowledge_router)
 
 def require_global_user(user: dict = Depends(get_current_user)) -> dict:
     if not user.get("all_clients"):

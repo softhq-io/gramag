@@ -54,6 +54,8 @@ class ProtoChatMessageRequest(BaseModel):
 
 @router.post("/ask")
 def ask(q: ProtoQuery, user: dict = Depends(get_current_user)):
+    if not q.machine_slug and not user.get("all_clients"):
+        raise HTTPException(422, "A visible machine is required for client-scoped chats")
     machine = require_proto_machine(user, q.machine_slug) if q.machine_slug else None
     session = create_session(
         machine_slug=q.machine_slug,
@@ -93,6 +95,8 @@ def ask(q: ProtoQuery, user: dict = Depends(get_current_user)):
 
 @router.post("/chats")
 def create_chat(req: ProtoChatCreate, current_user: dict = Depends(get_current_user)):
+    if not req.machine_slug and not current_user.get("all_clients"):
+        raise HTTPException(422, "A visible machine is required for client-scoped chats")
     machine = require_proto_machine(current_user, req.machine_slug) if req.machine_slug else None
     session = create_session(
         machine_slug=req.machine_slug,
@@ -203,6 +207,25 @@ def customer_overview(current_user: dict = Depends(get_current_user)):
     total_cfgs = sum(m.get("txts") or 0 for m in machines)
     total_docs = sum(m.get("docs") or 0 for m in machines)
 
+    clients = result_to_dicts(
+        proto_db.query(
+            """
+            MATCH (c:Customer)
+            WHERE c.erp_id IS NOT NULL
+              AND coalesce(c.active, false)
+              AND ($all_clients OR c.erp_id IN $client_ids)
+            OPTIONAL MATCH (c)-[:HAS_MACHINE]->(m:Machine)
+            WHERE coalesce(m.selected, false)
+            RETURN c.erp_id AS id, c.name AS name, count(DISTINCT m) AS machine_count
+            ORDER BY toLower(c.name)
+            """,
+            {
+                "all_clients": bool(current_user.get("all_clients")),
+                "client_ids": list(current_user.get("client_ids") or []),
+            },
+        )
+    )
+
     # Hersteller heuristic from machine type
     HERSTELLER_MAP = {
         "smb": "Ferag",
@@ -231,6 +254,7 @@ def customer_overview(current_user: dict = Depends(get_current_user)):
             r = proto_db.query(
                 """
                 MATCH (mach:Machine {slug: $slug})-[:HAS_DOCUMENT]->(d:Document)
+                WHERE coalesce(d.status, 'ready') = 'ready'
                 OPTIONAL MATCH (d)-[:HAS_SECTION]->(s:ManualSection)
                 WITH d, count(s) AS pages
                 WHERE pages > 0 OR d.kind <> 'pdf'
@@ -261,6 +285,7 @@ def customer_overview(current_user: dict = Depends(get_current_user)):
             "tagline": tagline,
             "machine_count": len(machines),
         },
+        "clients": clients,
         "stats": {
             "machines": len(machines),
             "documents": total_docs,
@@ -346,7 +371,11 @@ def document_viewer(
 
 
 @router.get("/document/{doc_id}")
-def document_file(doc_id: str, current_user: dict = Depends(get_current_user)):
+def document_file(
+    doc_id: str,
+    download: bool = False,
+    current_user: dict = Depends(get_current_user),
+):
     document = require_proto_document(current_user, doc_id)
     p = resolve_source(document.get("path") or "")
     name = document.get("name") or "document"
@@ -355,7 +384,7 @@ def document_file(doc_id: str, current_user: dict = Depends(get_current_user)):
         raise HTTPException(404, "File missing")
 
     ext = Path(p).suffix.lower()
-    mime = {
+    mime = document.get("content_type") or {
         ".pdf": "application/pdf",
         ".txt": "text/plain; charset=utf-8",
         ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -363,11 +392,13 @@ def document_file(doc_id: str, current_user: dict = Depends(get_current_user)):
         ".bmp": "image/bmp",
     }.get(ext, "application/octet-stream")
 
-    # Inline PDFs and text so they render in the browser tab.
-    disp = "inline" if kind in ("pdf", "text", "image") else "attachment"
+    # Inline supported documents by default; callers may request a download.
+    disp = "attachment" if download or kind not in ("pdf", "text", "image") else "inline"
     return FileResponse(
-        p, media_type=mime,
-        headers={"Content-Disposition": f'{disp}; filename="{name}"'},
+        p,
+        media_type=mime,
+        filename=name,
+        content_disposition_type=disp,
     )
 
 

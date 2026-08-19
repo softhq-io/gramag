@@ -37,8 +37,10 @@ def require_proto_machine(user: dict, machine_slug: str) -> dict:
     row = result_single(
         proto_db.query(
             """
-            MATCH (m:Machine {slug: $slug})
-            WHERE $all_clients OR m.erp_customer_id IN $client_ids
+            MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine {slug: $slug})
+            WHERE coalesce(c.active, m.erp_customer_id IS NOT NULL)
+              AND coalesce(m.selected, m.erp_id IS NOT NULL OR m.erp_link_mode = 'group')
+              AND ($all_clients OR m.erp_customer_id IN $client_ids)
             RETURN m.slug AS slug, m.folder AS folder,
                    m.customer AS customer, m.erp_customer_id AS client_id,
                    m.erp_id AS erp_id
@@ -55,8 +57,11 @@ def require_proto_section(user: dict, section_id: str) -> dict:
     row = result_single(
         proto_db.query(
             """
-            MATCH (m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_SECTION]->(s:ManualSection {id: $id})
-            WHERE $all_clients OR m.erp_customer_id IN $client_ids
+            MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_SECTION]->(s:ManualSection {id: $id})
+            WHERE coalesce(c.active, m.erp_customer_id IS NOT NULL)
+              AND coalesce(m.selected, m.erp_id IS NOT NULL OR m.erp_link_mode = 'group')
+              AND coalesce(d.status, 'ready') = 'ready'
+              AND ($all_clients OR m.erp_customer_id IN $client_ids)
             RETURN s.id AS id, s.page AS page, s.text AS text,
                    s.vision_desc AS vision_desc, s.merged AS merged,
                    s.png_path AS png_path, d.name AS doc_name, d.id AS doc_id,
@@ -74,9 +79,13 @@ def require_proto_document(user: dict, document_id: str) -> dict:
     row = result_single(
         proto_db.query(
             """
-            MATCH (m:Machine)-[:HAS_DOCUMENT]->(d:Document {id: $id})
-            WHERE $all_clients OR m.erp_customer_id IN $client_ids
+            MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)-[:HAS_DOCUMENT]->(d:Document {id: $id})
+            WHERE coalesce(c.active, m.erp_customer_id IS NOT NULL)
+              AND coalesce(m.selected, m.erp_id IS NOT NULL OR m.erp_link_mode = 'group')
+              AND coalesce(d.status, 'ready') = 'ready'
+              AND ($all_clients OR m.erp_customer_id IN $client_ids)
             RETURN d.id AS id, d.path AS path, d.name AS name, d.kind AS kind,
+                   d.content_type AS content_type,
                    m.slug AS machine_slug, m.erp_customer_id AS client_id
             LIMIT 1
             """,
@@ -92,8 +101,11 @@ def require_proto_asset(user: dict, asset_id: str) -> dict:
     row = result_single(
         proto_db.query(
             """
-            MATCH (m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_IMAGE]->(i:ImageAsset {id: $id})
-            WHERE $all_clients OR m.erp_customer_id IN $client_ids
+            MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)-[:HAS_DOCUMENT]->(d:Document)-[:HAS_IMAGE]->(i:ImageAsset {id: $id})
+            WHERE coalesce(c.active, m.erp_customer_id IS NOT NULL)
+              AND coalesce(m.selected, m.erp_id IS NOT NULL OR m.erp_link_mode = 'group')
+              AND coalesce(d.status, 'ready') = 'ready'
+              AND ($all_clients OR m.erp_customer_id IN $client_ids)
             RETURN i.id AS id, i.path AS path, i.name AS name,
                    m.slug AS machine_slug, m.erp_customer_id AS client_id
             """,
@@ -110,14 +122,16 @@ def require_proto_chat(user: dict, chat_id: str) -> dict:
         proto_db.query(
             """
             MATCH (s:ProtoChatSession {id: $id})
-            OPTIONAL MATCH (m:Machine)
+            OPTIONAL MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)
             WHERE m.slug = s.machine_slug
-            WITH s, m
-            WHERE $all_clients
-               OR (coalesce(s.isolation_version, 0) >= 2
+            WITH s, m, c
+            WHERE (s.machine_slug IS NULL AND $all_clients)
+               OR (m.slug IS NOT NULL
+                   AND coalesce(c.active, m.erp_customer_id IS NOT NULL)
+                   AND coalesce(m.selected, m.erp_id IS NOT NULL OR m.erp_link_mode = 'group')
+                   AND ($all_clients OR (coalesce(s.isolation_version, 0) >= 2
                    AND s.created_by_id = $user_id
-                   AND ((m.slug IS NOT NULL AND m.erp_customer_id IN $client_ids)
-                        OR s.machine_slug IS NULL))
+                   AND m.erp_customer_id IN $client_ids)))
             OPTIONAL MATCH (s)-[:HAS_MESSAGE]->(msg:ProtoChatMessage)
             WITH s, count(msg) AS message_count, max(msg.created_at) AS last_message_at
             RETURN s.id AS id, s.machine_slug AS machine_slug,

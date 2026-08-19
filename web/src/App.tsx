@@ -9,6 +9,8 @@ import { PartDetailPage } from './pages/PartDetailPage'
 import { ProtoPage } from './pages/ProtoPage'
 import { UsersAdminPage } from './pages/UsersAdminPage'
 import { SuperadminRoute } from './auth/SuperadminRoute'
+import { KnowledgeManagerRoute } from './auth/KnowledgeManagerRoute'
+import { KnowledgeManagementPage } from './pages/KnowledgeManagementPage'
 import './i18n'
 
 function App() {
@@ -26,6 +28,7 @@ function App() {
             <Route path="/part/:partNummer" element={<SuperadminRoute><PartDetailPage /></SuperadminRoute>} />
             <Route path="/fleet" element={<SuperadminRoute><FleetDashboardPage /></SuperadminRoute>} />
             <Route path="/admin/users" element={<SuperadminRoute><UsersAdminPage /></SuperadminRoute>} />
+            <Route path="/knowledge" element={<KnowledgeManagerRoute><KnowledgeManagementPage /></KnowledgeManagerRoute>} />
             <Route path="*" element={<Navigate to="/proto" replace />} />
           </Route>
         </Routes>

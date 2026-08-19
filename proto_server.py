@@ -6,6 +6,7 @@ Two FalkorDB graphs on the same instance:
 """
 
 import os
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +20,7 @@ from proto.router import router as proto_router
 from erp_router import router as erp_router
 from mission_router import router as mission_router
 from fleet_router import router as fleet_router
+from knowledge_router import router as knowledge_router
 
 app = FastAPI(title="Gramag Knowledge Assistant")
 app.add_middleware(
@@ -34,6 +36,7 @@ app.include_router(proto_router)
 app.include_router(erp_router)
 app.include_router(mission_router)
 app.include_router(fleet_router)
+app.include_router(knowledge_router)
 
 
 @app.on_event("startup")
@@ -73,6 +76,21 @@ def health():
     try:
         proto_db.query("RETURN 1 AS ok")
         result["proto_graph"] = "ok"
+        from knowledge_service import queue_health
+
+        ingest = queue_health()
+        heartbeat = ingest.get("worker_heartbeat_at")
+        stale = True
+        if heartbeat:
+            try:
+                updated = datetime.fromisoformat(str(heartbeat).replace("Z", "+00:00"))
+                stale = (datetime.now(timezone.utc) - updated).total_seconds() > 120
+            except ValueError:
+                pass
+        result["managed_ingest"] = {
+            **ingest,
+            "worker_status": "stale" if stale else "ok",
+        }
     except Exception:
         result["proto_graph"] = "unavailable"
     try:

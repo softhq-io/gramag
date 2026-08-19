@@ -16,10 +16,8 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('access_token')
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(opts.headers as Record<string, string>),
-  }
+  const headers: Record<string, string> = { ...(opts.headers as Record<string, string>) }
+  if (!(opts.body instanceof FormData)) headers['Content-Type'] = 'application/json'
   if (token) headers['Authorization'] = `Bearer ${token}`
 
   const res = await fetch(`${BASE}${path}`, { ...opts, headers })
@@ -53,7 +51,9 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 }
 
 function parseResponse<T>(response: Response): Promise<T> {
-  if (response.status === 204) return Promise.resolve(undefined as T)
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return Promise.resolve(undefined as T)
+  }
   return response.json() as Promise<T>
 }
 
@@ -89,4 +89,8 @@ export function patch<T>(path: string, body: unknown) {
 
 export function del(path: string) {
   return request<void>(path, { method: 'DELETE' })
+}
+
+export function postForm<T>(path: string, body: FormData) {
+  return request<T>(path, { method: 'POST', body })
 }

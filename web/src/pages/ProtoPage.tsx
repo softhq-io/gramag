@@ -85,6 +85,9 @@ export function ProtoPage() {
 
   const customerOptions = useMemo(() => {
     if (!overview) return []
+    if (overview.clients?.length) {
+      return overview.clients.map(client => client.name).sort((a, b) => a.localeCompare(b, 'de-CH'))
+    }
     const machineCustomers = overview.machines
       .map((machine) => machine.customer)
       .filter((value): value is string => Boolean(value))
