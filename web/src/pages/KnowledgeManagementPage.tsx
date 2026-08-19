@@ -248,8 +248,8 @@ export function KnowledgeManagementPage() {
                   setClientId(client.id)
                   setMachineId('')
                 }}>
-                  <strong title={client.name || client.id}>{client.name || client.id}</strong>
-                  <small title={`CRM client ${client.id}`}>
+                  <strong>{client.name || client.id}</strong>
+                  <small>
                     CRM {client.id} · {client.machine_count} machines · {client.selected_machine_count} selected
                   </small>
                 </button>
@@ -282,7 +282,7 @@ export function KnowledgeManagementPage() {
             {orderedMachines.map(machine => (
               <div className={`knowledge-row ${machine.erp_id === machineId ? 'selected' : ''}`} key={machine.erp_id}>
                 <button className="knowledge-row-main" disabled={busy || !machine.selected} onClick={() => setMachineId(machine.erp_id)}>
-                  <strong className="knowledge-machine-name" title={machine.name || machine.erp_id}>{machine.name || machine.erp_id}</strong>
+                  <strong className="knowledge-machine-name">{machine.name || machine.erp_id}</strong>
                   <small>{machine.serial || machine.number || (machine.legacy ? 'Legacy grouped machine' : `CRM ${machine.erp_id}`)} · {machine.ready_document_count} ready</small>
                 </button>
                 <button
@@ -304,7 +304,7 @@ export function KnowledgeManagementPage() {
               <div><span>3</span><strong>Documents</strong></div>
               <small>{selectedMachine ? `${documents.length} total` : ''}</small>
             </div>
-            <small title={selectedMachine?.name || undefined}>{selectedMachine?.name || 'Choose a selected machine'}</small>
+            <small>{selectedMachine?.name || 'Choose a selected machine'}</small>
           </div>
 
           {selectedMachine && (
@@ -358,7 +358,7 @@ export function KnowledgeManagementPage() {
               <article className={`knowledge-document ${document.status === 'ready' ? 'compact' : ''}`} key={document.id}>
                 <div className="knowledge-document-title">
                   <div>
-                    <strong title={document.name}>{document.name}</strong>
+                    <strong>{document.name}</strong>
                     <small>{document.category} · {formatBytes(document.size)} · {document.source === 'upload' ? 'Uploaded' : 'Legacy SharePoint'}</small>
                   </div>
                   <span className={`knowledge-status ${document.status}`}>{document.status}</span>
