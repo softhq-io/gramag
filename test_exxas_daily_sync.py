@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from unittest import mock
 
 import exxas_daily_sync as sync
@@ -83,6 +84,84 @@ class ExxasDailySyncTests(unittest.TestCase):
             "2026-04-20 16:40:43",
         )
 
+    def test_bounded_watermark_advances_one_window_and_clamps_to_now(self):
+        now = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            sync.bounded_watermark("2026-04-20 00:00:00", 168, now),
+            "2026-04-27 00:00:00",
+        )
+        self.assertEqual(
+            sync.bounded_watermark("2026-05-01 00:00:00", 168, now),
+            "2026-05-01 12:00:00",
+        )
+
+    def test_rows_through_keeps_only_current_window_and_malformed_rows(self):
+        rows = [
+            {"id": "old", "editDate": "2026-04-20 00:00:00"},
+            {"id": "edge", "editDate": "2026-04-27 00:00:00"},
+            {"id": "future", "editDate": "2026-04-27 00:00:01"},
+            {"id": "malformed", "editDate": "unknown"},
+        ]
+
+        selected = sync.rows_through(rows, "editDate", "2026-04-27 00:00:00")
+
+        self.assertEqual([row["id"] for row in selected], ["old", "edge", "malformed"])
+
+    def test_machine_phase_imports_and_checkpoints_independently(self):
+        counts = sync.SyncCounts()
+        machines = [
+            {"id": "m1", "editDate": "2026-04-22 18:00:00"},
+            {"id": "m2", "editDate": "2026-04-23 18:00:00"},
+        ]
+
+        with mock.patch.object(sync, "fetch_changed", return_value=machines) as fetch, \
+            mock.patch.object(sync, "upsert_machine") as upsert, \
+            mock.patch.object(sync, "save_machine_watermark") as save, \
+            mock.patch.object(
+                sync,
+                "utc_now",
+                return_value=datetime(2026, 4, 24, 0, 0, 0, tzinfo=timezone.utc),
+            ):
+            result, watermark = sync.sync_changed_machines(
+                mock.Mock(), "run-1", "2026-04-20 00:00:00", 48, counts
+            )
+
+        self.assertEqual(result, machines)
+        self.assertEqual(watermark, "2026-04-24 00:00:00")
+        self.assertEqual(counts.changed_machines_seen, 2)
+        self.assertEqual(counts.machines_touched, 2)
+        self.assertEqual(upsert.call_count, 2)
+        save.assert_called_once_with("run-1", "2026-04-24 00:00:00")
+        self.assertEqual(fetch.call_count, 2)
+        self.assertEqual(
+            [call.args[3] for call in fetch.call_args_list],
+            ["editDate", "createDate"],
+        )
+        self.assertTrue(
+            all(call.args[4] == "2026-04-18 00:00:00" for call in fetch.call_args_list)
+        )
+
+    def test_fetch_changed_machines_includes_null_edit_date_and_deduplicates(self):
+        edited = [
+            {"id": "m1", "editDate": "2026-04-22 18:00:00"},
+        ]
+        created = [
+            {"id": "m1", "editDate": "2026-04-22 18:00:00"},
+            {"id": "m2", "createDate": "2026-04-23 18:00:00", "editDate": None},
+        ]
+
+        with mock.patch.object(sync, "fetch_changed", side_effect=[edited, created]) as fetch:
+            machines = sync.fetch_changed_machines(
+                mock.Mock(), "2026-04-20 00:00:00"
+            )
+
+        self.assertEqual([machine["id"] for machine in machines], ["m1", "m2"])
+        self.assertEqual(
+            [call.args[3] for call in fetch.call_args_list],
+            ["editDate", "createDate"],
+        )
+
     def test_build_payload_maps_changed_docs_comments_and_machines(self):
         counts = sync.SyncCounts()
 
@@ -111,7 +190,6 @@ class ExxasDailySyncTests(unittest.TestCase):
 
         with mock.patch.object(sync, "fetch_changed", side_effect=fake_fetch_changed), \
             mock.patch.object(sync, "fetch_service_doc_by_id") as by_id, \
-            mock.patch.object(sync, "fetch_machine_by_id") as machine_by_id, \
             mock.patch.object(sync, "fetch_comments_for_doc") as comments, \
             mock.patch.object(sync, "fetch_parts_for_doc") as parts:
             by_id.return_value = {
@@ -119,10 +197,6 @@ class ExxasDailySyncTests(unittest.TestCase):
                 "editDate": "2026-04-22 17:05:00",
                 "refProdukt": {"id": "m2"},
                 "refKunde": {"id": "c2", "nummer": "200"},
-            }
-            machine_by_id.side_effect = lambda client, machine_id: {
-                "id": machine_id,
-                "editDate": "2026-04-22 17:10:00",
             }
             comments.return_value = [{"id": "x", "datum": "2026-04-22 17:15:00"}]
             parts.return_value = [{"id": "p"}]
@@ -135,6 +209,49 @@ class ExxasDailySyncTests(unittest.TestCase):
         self.assertEqual(watermark, "2026-04-22 18:00:00")
         self.assertEqual([m["machine_id"] for m in payload["machines"]], ["m1", "m2", "m3"])
         self.assertEqual(sum(len(m["service_documents"]) for m in payload["machines"]), 2)
+
+    def test_bounded_payload_filters_rows_and_deduplicates_comment_doc_lookups(self):
+        counts = sync.SyncCounts()
+
+        def fake_fetch_changed(client, root, fields, timestamp_field, since, extra_filters="", page_size=200):
+            if root == "Dokument":
+                return [
+                    {"id": "d1", "editDate": "2026-04-22 10:00:00", "refProdukt": {"id": "m1"}},
+                    {"id": "later", "editDate": "2026-04-30 10:00:00", "refProdukt": {"id": "m2"}},
+                ]
+            if root == "Kommentar":
+                return [
+                    {"id": "c1", "datum": "2026-04-22 11:00:00", "refTyp": "dok", "refId": "d2"},
+                    {"id": "c2", "datum": "2026-04-22 12:00:00", "refTyp": "dok", "refId": "d2"},
+                    {"id": "later", "datum": "2026-04-30 12:00:00", "refTyp": "dok", "refId": "d3"},
+                ]
+            raise AssertionError(root)
+
+        with mock.patch.object(sync, "fetch_changed", side_effect=fake_fetch_changed), \
+            mock.patch.object(sync, "fetch_service_doc_by_id") as by_id, \
+            mock.patch.object(sync, "fetch_comments_for_doc", return_value=[]), \
+            mock.patch.object(sync, "fetch_parts_for_doc", return_value=[]):
+            by_id.return_value = {
+                "id": "d2",
+                "editDate": "2026-04-22 11:30:00",
+                "refProdukt": {"id": "m2"},
+            }
+            payload, watermark = sync.build_sync_payload(
+                mock.Mock(call_count=0),
+                "2026-04-20 00:00:00",
+                counts,
+                until="2026-04-27 00:00:00",
+                changed_machines=[],
+            )
+
+        self.assertEqual(watermark, "2026-04-27 00:00:00")
+        self.assertEqual(counts.changed_docs_seen, 1)
+        self.assertEqual(counts.changed_comments_seen, 2)
+        by_id.assert_called_once_with(mock.ANY, "d2")
+        self.assertEqual(
+            sum(len(machine["service_documents"]) for machine in payload["machines"]),
+            2,
+        )
 
     def test_import_payload_is_repeatable_for_same_ids(self):
         payload = {
@@ -168,6 +285,21 @@ class ExxasDailySyncTests(unittest.TestCase):
             calls,
             [("m", "m1"), ("d", "d1"), ("c", "c1"), ("p", "p1")] * 2,
         )
+
+    def test_import_payload_skips_machine_already_committed_by_machine_phase(self):
+        payload = {
+            "machines": [
+                {"machine_id": "m1", "machine": {"id": "m1"}, "service_documents": []},
+                {"machine_id": "m2", "machine": {"id": "m2"}, "service_documents": []},
+            ]
+        }
+        counts = sync.SyncCounts(machines_touched=1)
+
+        with mock.patch.object(sync, "upsert_machine") as upsert:
+            sync.import_payload(payload, counts, preimported_machine_ids={"m1"})
+
+        upsert.assert_called_once_with({"id": "m2"})
+        self.assertEqual(counts.machines_touched, 2)
 
 
 if __name__ == "__main__":

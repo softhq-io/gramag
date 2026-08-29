@@ -420,6 +420,124 @@ def effective_watermark(watermark: str, lookback_hours: int) -> str:
     return format_erp_ts(parsed - timedelta(hours=lookback_hours))
 
 
+def bounded_watermark(
+    watermark: str,
+    batch_hours: int,
+    now: datetime | None = None,
+) -> str:
+    """Return the end of the next bounded catch-up window."""
+    parsed = parse_erp_ts(watermark)
+    if not parsed:
+        raise RuntimeError(f"Invalid Exxas watermark: {watermark!r}")
+    if batch_hours <= 0:
+        raise RuntimeError("Exxas batch hours must be greater than zero.")
+    upper = min(parsed + timedelta(hours=batch_hours), now or utc_now())
+    return format_erp_ts(upper)
+
+
+def rows_through(
+    rows: list[dict[str, Any]],
+    timestamp_field: str,
+    watermark: str,
+) -> list[dict[str, Any]]:
+    """Keep rows in the current catch-up window.
+
+    Rows without a parseable timestamp are retained so a malformed ERP row is
+    never silently skipped when the watermark advances.
+    """
+    cutoff = parse_erp_ts(watermark)
+    if not cutoff:
+        raise RuntimeError(f"Invalid Exxas batch watermark: {watermark!r}")
+    selected = []
+    for row in rows:
+        row_ts = parse_erp_ts(row.get(timestamp_field))
+        if row_ts is None or row_ts <= cutoff:
+            selected.append(row)
+    return selected
+
+
+def get_machine_watermark(fallback: str | None = None) -> str | None:
+    result = db.query(
+        """
+        MATCH (s:SyncState {name: $name})
+        RETURN s.machine_watermark AS watermark
+        """,
+        {"name": SYNC_NAME},
+    )
+    return result_value(result, "watermark") or fallback
+
+
+def save_machine_watermark(run_id: str, watermark: str):
+    now = utc_iso()
+    db.write(
+        """
+        MERGE (s:SyncState {name: $name})
+        SET s.machine_watermark = $watermark,
+            s.machine_last_success_at = $now,
+            s.machine_last_run_id = $run_id,
+            s.updated_at = $now
+        """,
+        {"name": SYNC_NAME, "run_id": run_id, "watermark": watermark, "now": now},
+    )
+
+
+def fetch_changed_machines(client: ExxasClient, since: str) -> list[dict[str, Any]]:
+    """Fetch machines changed or created since the machine watermark.
+
+    Exxas leaves ``editDate`` empty on some newly created products, so an
+    edit-only query silently misses active machines. Querying both timestamps
+    and merging by ERP id covers those records without duplicating imports.
+    """
+    machines_by_id: dict[str, dict[str, Any]] = {}
+    for timestamp_field in ("editDate", "createDate"):
+        for machine in fetch_changed(
+            client,
+            "Produkt",
+            MACHINE_FIELDS,
+            timestamp_field,
+            since,
+        ):
+            machine_id = str(machine.get("id") or "").strip()
+            if machine_id:
+                machines_by_id[machine_id] = machine
+    return list(machines_by_id.values())
+
+
+def sync_changed_machines(
+    client: ExxasClient,
+    run_id: str,
+    watermark_before: str,
+    lookback_hours: int,
+    counts: SyncCounts,
+    dry_run: bool = False,
+) -> tuple[list[dict[str, Any]], str]:
+    """Import changed machines before the heavier service-data phase.
+
+    The independent watermark is committed immediately after all returned
+    machines are upserted. A later service-data failure therefore cannot roll
+    back or repeatedly block machine synchronization.
+    """
+    since = effective_watermark(watermark_before, lookback_hours)
+    machines = fetch_changed_machines(client, since)
+    counts.changed_machines_seen = len(machines)
+    for machine in machines:
+        machine_id = str(machine.get("id") or "").strip()
+        if not machine_id:
+            counts.reject("changed_machine_missing_id")
+            continue
+        if not dry_run:
+            upsert_machine(machine)
+        counts.machines_touched += 1
+
+    watermark_after = max_erp_ts(
+        [watermark_before, format_erp_ts(utc_now())]
+        + [machine.get("editDate") for machine in machines]
+    ) or watermark_before
+    if not dry_run:
+        save_machine_watermark(run_id, watermark_after)
+    return machines, watermark_after
+
+
 def acquire_lock(run_id: str, lease_minutes: int = 90):
     now = utc_iso()
     lock_until = utc_iso(utc_now() + timedelta(minutes=lease_minutes))
@@ -470,6 +588,7 @@ def initialize_watermark(watermark: str) -> dict[str, Any]:
         """
         MERGE (s:SyncState {name: $name})
         SET s.watermark = $watermark,
+            s.machine_watermark = coalesce(s.machine_watermark, $watermark),
             s.status = 'initialized',
             s.last_success_at = coalesce(s.last_success_at, $now),
             s.lock_run_id = '',
@@ -548,25 +667,53 @@ def finish_run(
         )
 
 
-def build_sync_payload(client: ExxasClient, since: str, counts: SyncCounts) -> tuple[dict[str, Any], str]:
+def machine_from_service_doc(doc: dict[str, Any]) -> dict[str, Any] | None:
+    ref_product = doc.get("refProdukt") or {}
+    machine_id = str(ref_product.get("id") or "").strip()
+    if not machine_id:
+        return None
+    return {
+        "id": machine_id,
+        "titel": ref_product.get("titel"),
+        "seriennummer": ref_product.get("seriennummer"),
+        "refKunde": doc.get("refKunde") or {},
+    }
+
+
+def build_sync_payload(
+    client: ExxasClient,
+    since: str,
+    counts: SyncCounts,
+    *,
+    until: str | None = None,
+    changed_machines: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any], str]:
     service_filter = '{propertyFilter:{property:typ,operator:equals,filterValue:"s"}}'
     changed_docs = fetch_changed(
         client, "Dokument", SERVICE_DOC_FIELDS, "editDate", since, service_filter
     )
     changed_comments = fetch_changed(client, "Kommentar", COMMENT_FIELDS, "datum", since)
-    changed_machines = fetch_changed(client, "Produkt", MACHINE_FIELDS, "editDate", since)
+    if changed_machines is None:
+        changed_machines = fetch_changed(client, "Produkt", MACHINE_FIELDS, "editDate", since)
+
+    if until:
+        changed_docs = rows_through(changed_docs, "editDate", until)
+        changed_comments = rows_through(changed_comments, "datum", until)
 
     counts.changed_docs_seen = len(changed_docs)
     counts.changed_comments_seen = len(changed_comments)
-    counts.changed_machines_seen = len(changed_machines)
+    if not counts.changed_machines_seen:
+        counts.changed_machines_seen = len(changed_machines)
 
     docs_by_id = {str(d.get("id")): d for d in changed_docs if d.get("id")}
+    checked_doc_ids = set(docs_by_id)
     for comment in changed_comments:
         if str(comment.get("refTyp") or "").lower() != "dok":
             continue
         doc_id = str(comment.get("refId") or "").strip()
-        if not doc_id or doc_id in docs_by_id:
+        if not doc_id or doc_id in checked_doc_ids:
             continue
+        checked_doc_ids.add(doc_id)
         doc = fetch_service_doc_by_id(client, doc_id)
         if doc and doc.get("typ", "s") == "s":
             docs_by_id[doc_id] = doc
@@ -582,7 +729,7 @@ def build_sync_payload(client: ExxasClient, since: str, counts: SyncCounts) -> t
         if not machine_id:
             counts.reject("service_doc_missing_machine")
             continue
-        machine = machines_by_id.get(machine_id) or fetch_machine_by_id(client, machine_id)
+        machine = machines_by_id.get(machine_id) or machine_from_service_doc(doc)
         if not machine:
             counts.reject("machine_not_found")
             continue
@@ -609,6 +756,7 @@ def build_sync_payload(client: ExxasClient, since: str, counts: SyncCounts) -> t
         "created_at_utc": utc_iso(),
         "source": "exxas_daily_graphql",
         "watermark_query_since": since,
+        "watermark_batch_until": until,
         "summary": {
             "machines_in_payload": len(machines_out),
             "service_docs_in_payload": sum(len(m["service_documents"]) for m in machines_out),
@@ -616,20 +764,27 @@ def build_sync_payload(client: ExxasClient, since: str, counts: SyncCounts) -> t
         },
         "machines": machines_out,
     }
-    watermark_after = max_erp_ts(watermark_candidates) or since
+    watermark_after = until or max_erp_ts(watermark_candidates) or since
     return payload, watermark_after
 
 
-def import_payload(payload: dict[str, Any], counts: SyncCounts, dry_run: bool = False):
+def import_payload(
+    payload: dict[str, Any],
+    counts: SyncCounts,
+    dry_run: bool = False,
+    preimported_machine_ids: set[str] | None = None,
+):
+    preimported_machine_ids = preimported_machine_ids or set()
     for machine_record in payload.get("machines") or []:
         machine = machine_record.get("machine") or {}
         machine_id = str(machine.get("id") or machine_record.get("machine_id") or "").strip()
         if not machine_id:
             counts.reject("payload_machine_missing_id")
             continue
-        if not dry_run:
-            upsert_machine(machine)
-        counts.machines_touched += 1
+        if machine_id not in preimported_machine_ids:
+            if not dry_run:
+                upsert_machine(machine)
+            counts.machines_touched += 1
 
         for service_record in machine_record.get("service_documents") or []:
             doc = service_record.get("service_document") or {}
@@ -674,6 +829,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-calls", type=int, default=450)
     parser.add_argument("--min-call-interval-ms", type=int, default=900)
     parser.add_argument("--lookback-hours", type=int, default=48)
+    parser.add_argument(
+        "--batch-hours",
+        type=int,
+        default=int(os.environ.get("EXXAS_BATCH_HOURS", "168")),
+        help="Maximum service-data watermark advance per successful run.",
+    )
     parser.add_argument("--raw-dir", default="/data/exxas/raw")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -710,6 +871,9 @@ def main() -> int:
             "No Exxas sync watermark found. Bootstrap/import new ERP data before running daily sync."
         )
     since = effective_watermark(watermark_before, args.lookback_hours)
+    batch_until = bounded_watermark(watermark_before, args.batch_hours)
+    machine_watermark_before = get_machine_watermark(watermark_before) or watermark_before
+    machine_watermark_after = machine_watermark_before
 
     if not args.dry_run:
         acquire_lock(run_id)
@@ -717,8 +881,30 @@ def main() -> int:
 
     try:
         client.login()
-        payload, watermark_after = build_sync_payload(client, since, counts)
-        import_payload(payload, counts, dry_run=args.dry_run)
+        changed_machines, machine_watermark_after = sync_changed_machines(
+            client,
+            run_id,
+            machine_watermark_before,
+            args.lookback_hours,
+            counts,
+            dry_run=args.dry_run,
+        )
+        payload, watermark_after = build_sync_payload(
+            client,
+            since,
+            counts,
+            until=batch_until,
+            changed_machines=changed_machines,
+        )
+        preimported_machine_ids = {
+            str(machine.get("id")) for machine in changed_machines if machine.get("id")
+        }
+        import_payload(
+            payload,
+            counts,
+            dry_run=args.dry_run,
+            preimported_machine_ids=preimported_machine_ids,
+        )
         report = {
             "run_id": run_id,
             "source": SYNC_NAME,
@@ -726,7 +912,10 @@ def main() -> int:
             "dry_run": args.dry_run,
             "watermark_before": watermark_before,
             "watermark_query_since": since,
+            "watermark_batch_until": batch_until,
             "watermark_after": watermark_after,
+            "machine_watermark_before": machine_watermark_before,
+            "machine_watermark_after": machine_watermark_after,
             "api_calls": client.call_count,
             "counts": counts.as_dict(),
             "payload": payload,
@@ -753,6 +942,9 @@ def main() -> int:
             "dry_run": args.dry_run,
             "watermark_before": watermark_before,
             "watermark_query_since": since,
+            "watermark_batch_until": batch_until,
+            "machine_watermark_before": machine_watermark_before,
+            "machine_watermark_after": machine_watermark_after,
             "api_calls": client.call_count,
             "counts": counts.as_dict(),
             "error": error,
