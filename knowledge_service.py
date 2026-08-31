@@ -26,6 +26,7 @@ MANAGER_ROLES = {"superadmin", "all_clients"}
 MAX_UPLOAD_BYTES = int(os.getenv("KNOWLEDGE_MAX_UPLOAD_BYTES", str(250 * 1024 * 1024)))
 DOCUMENT_ROOT = Path(os.getenv("KNOWLEDGE_DOCUMENT_ROOT", "/data/managed-documents"))
 APP_DATA_ROOT = Path(os.getenv("APP_DATA_ROOT", "/data"))
+QUEUE_STALL_SECONDS = int(os.getenv("KNOWLEDGE_QUEUE_STALL_SECONDS", "600"))
 UPLOAD_CHUNK_BYTES = 1024 * 1024
 ALLOWED_EXTENSIONS = {
     ".pdf": "pdf",
@@ -787,19 +788,80 @@ def delete_document(document_id: str, user: dict) -> bool:
     return purge_document(document_id)
 
 
+def _parse_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def queue_is_stalled(health: dict, *, now: datetime | None = None) -> bool:
+    """Return true only when actionable work is old and no job is progressing."""
+    current = now or datetime.now(timezone.utc)
+    oldest_actionable = _parse_timestamp(health.get("oldest_actionable_at"))
+    if not oldest_actionable or int(health.get("actionable_queued") or 0) < 1:
+        return False
+    if (current - oldest_actionable).total_seconds() <= QUEUE_STALL_SECONDS:
+        return False
+
+    if int(health.get("processing") or 0) > 0:
+        latest_progress = _parse_timestamp(health.get("latest_processing_update_at"))
+        if latest_progress and (current - latest_progress).total_seconds() <= QUEUE_STALL_SECONDS:
+            return False
+    return True
+
+
 def queue_health() -> dict:
-    row = result_single(
+    now = now_iso()
+    queue = result_single(
         proto_db.query(
             """
             OPTIONAL MATCH (j:IngestionJob {status: 'queued'})
-            WITH count(j) AS queued, min(j.created_at) AS oldest_queued_at
+            RETURN count(j) AS queued, min(j.created_at) AS oldest_queued_at
+            """
+        )
+    ) or {}
+    actionable = result_single(
+        proto_db.query(
+            """
+            MATCH (j:IngestionJob {status: 'queued'})
+            WHERE coalesce(j.next_attempt_at, j.created_at) <= $now
+            RETURN count(j) AS actionable_queued,
+                   min(coalesce(j.next_attempt_at, j.created_at)) AS oldest_actionable_at
+            """,
+            {"now": now},
+        )
+    ) or {}
+    processing = result_single(
+        proto_db.query(
+            """
+            MATCH (j:IngestionJob {status: 'processing'})
+            RETURN count(j) AS processing,
+                   max(j.updated_at) AS latest_processing_update_at
+            """
+        )
+    ) or {}
+    heartbeat = result_single(
+        proto_db.query(
+            """
             OPTIONAL MATCH (h:WorkerHeartbeat {name: 'managed-ingest'})
-            RETURN queued, oldest_queued_at, h.updated_at AS worker_heartbeat_at,
-                   h.worker_id AS worker_id
+            RETURN h.updated_at AS worker_heartbeat_at, h.worker_id AS worker_id
             """
         )
     ) or {}
     failed = result_single(
         proto_db.query("MATCH (d:Document {status: 'failed'}) RETURN count(d) AS failed")
     ) or {}
-    return {**row, "failed": int(failed.get("failed") or 0)}
+    health = {
+        **queue,
+        **actionable,
+        **processing,
+        **heartbeat,
+        "queued": int(queue.get("queued") or 0),
+        "actionable_queued": int(actionable.get("actionable_queued") or 0),
+        "processing": int(processing.get("processing") or 0),
+        "failed": int(failed.get("failed") or 0),
+    }
+    return {**health, "queue_stalled": queue_is_stalled(health)}

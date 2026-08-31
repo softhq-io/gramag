@@ -62,9 +62,12 @@ mirrored back into app-data.
 
 ## Operational checks
 
-- `/health` reports queue depth, terminal failure count, and worker heartbeat.
+- `/health` reports total and actionable queue depth, active processing, terminal
+  failure count, worker heartbeat, and whether actionable work is stalled.
 - The managed worker must have exactly one replica and share the app-data mount.
-- Investigate a heartbeat older than two minutes or a job queued for more than
-  ten minutes.
+- Investigate a heartbeat older than two minutes, a terminal failure, or
+  actionable work older than ten minutes when no processing job has made
+  progress in that interval. A queue waiting behind a progressing document or
+  a scheduled retry backoff is not stalled.
 - Permanent deletion removes the original, cached pages, and derived graph
   nodes. Recovery requires an infrastructure backup.

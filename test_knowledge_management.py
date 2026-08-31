@@ -7,6 +7,7 @@ import unittest
 import os
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
@@ -142,6 +143,35 @@ class UploadValidationTests(unittest.TestCase):
 
 
 class WorkerStateTests(unittest.TestCase):
+    def test_recent_processing_progress_suppresses_queue_stall(self):
+        now = datetime(2026, 8, 31, 10, 0, tzinfo=timezone.utc)
+        health = {
+            "actionable_queued": 5,
+            "oldest_actionable_at": (now - timedelta(minutes=30)).isoformat(),
+            "processing": 1,
+            "latest_processing_update_at": (now - timedelta(seconds=30)).isoformat(),
+        }
+        self.assertFalse(knowledge_service.queue_is_stalled(health, now=now))
+
+    def test_old_actionable_queue_without_progress_is_stalled(self):
+        now = datetime(2026, 8, 31, 10, 0, tzinfo=timezone.utc)
+        health = {
+            "actionable_queued": 2,
+            "oldest_actionable_at": (now - timedelta(minutes=11)).isoformat(),
+            "processing": 1,
+            "latest_processing_update_at": (now - timedelta(minutes=11)).isoformat(),
+        }
+        self.assertTrue(knowledge_service.queue_is_stalled(health, now=now))
+
+    def test_retry_backoff_is_not_actionable(self):
+        now = datetime(2026, 8, 31, 10, 0, tzinfo=timezone.utc)
+        health = {
+            "actionable_queued": 0,
+            "oldest_actionable_at": None,
+            "processing": 0,
+        }
+        self.assertFalse(knowledge_service.queue_is_stalled(health, now=now))
+
     def test_ingest_errors_exposed_to_users_do_not_leak_internal_details(self):
         message = user_safe_ingest_error(
             RuntimeError("API key failure while reading /data/managed-documents/secret"),

@@ -75,17 +75,9 @@ class ManagedIngestWorker:
         )
         if time.monotonic() - self.last_health_log >= 60:
             health = queue_health()
-            oldest = health.get("oldest_queued_at")
-            stalled = False
-            if oldest:
-                try:
-                    queued_at = datetime.fromisoformat(str(oldest).replace("Z", "+00:00"))
-                    stalled = (utc_now() - queued_at).total_seconds() > 600
-                except ValueError:
-                    pass
             print(
                 "managed_ingest_health "
-                + json.dumps({**health, "queue_stalled": stalled}, sort_keys=True),
+                + json.dumps(health, sort_keys=True),
                 flush=True,
             )
             self.last_health_log = time.monotonic()
