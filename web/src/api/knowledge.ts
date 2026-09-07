@@ -20,7 +20,7 @@ export interface KnowledgeMachine {
   legacy?: boolean
 }
 
-export type DocumentStatus = 'queued' | 'processing' | 'ready' | 'failed' | 'deleting'
+export type DocumentStatus = 'queued' | 'processing' | 'ready' | 'failed' | 'deleting' | 'purging'
 
 export interface ManagedDocument {
   id: string
@@ -86,3 +86,15 @@ export const retryManagedDocument = (id: string) =>
 
 export const deleteManagedDocument = (id: string) =>
   del(`/knowledge/documents/${encodeURIComponent(id)}`)
+
+export const bulkDeleteManagedDocuments = (machineId: string, documentIds: string[]) =>
+  post<{ accepted: number; document_ids: string[]; undo_seconds: number; deletion_not_before: string }>(
+    `/knowledge/machines/${encodeURIComponent(machineId)}/documents/bulk-delete`,
+    { document_ids: documentIds },
+  )
+
+export const cancelBulkDeleteManagedDocuments = (machineId: string) =>
+  post<{ restored: number }>(
+    `/knowledge/machines/${encodeURIComponent(machineId)}/documents/bulk-delete/cancel`,
+    {},
+  )

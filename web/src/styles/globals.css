@@ -4680,6 +4680,74 @@ body {
   font-size: 11px;
 }
 
+.knowledge-document-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--proto-border-soft);
+  background: rgba(9, 16, 25, .72);
+  color: var(--proto-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.knowledge-document-toolbar label {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  color: var(--proto-text);
+  cursor: pointer;
+}
+
+.knowledge-document-toolbar input,
+.knowledge-document-checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--proto-cyan);
+  cursor: pointer;
+}
+
+.knowledge-document-toolbar > span {
+  margin-right: auto;
+}
+
+.knowledge-document-toolbar button {
+  padding: 7px 10px;
+  border: 1px solid rgba(248, 81, 73, .36);
+  border-radius: 7px;
+  background: rgba(248, 81, 73, .1);
+  color: #ff9b93;
+  cursor: pointer;
+  font: inherit;
+}
+
+.knowledge-document-toolbar button:hover:not(:disabled) {
+  border-color: rgba(248, 81, 73, .65);
+  background: rgba(248, 81, 73, .18);
+  color: #ffc0bc;
+}
+
+.knowledge-document-toolbar button.undo {
+  border-color: rgba(18, 189, 213, .48);
+  background: var(--proto-cyan-soft);
+  color: var(--proto-cyan);
+}
+
+.knowledge-document-toolbar button.undo:hover:not(:disabled) {
+  border-color: var(--proto-cyan);
+  background: rgba(18, 189, 213, .18);
+  color: var(--proto-text);
+}
+
+.knowledge-document-toolbar button:disabled,
+.knowledge-document-toolbar input:disabled,
+.knowledge-document-checkbox input:disabled {
+  cursor: default;
+  opacity: .5;
+}
+
 .knowledge-document-list {
   min-height: 0;
   flex: 1;
@@ -4716,7 +4784,14 @@ body {
 .knowledge-document-title > div {
   display: grid;
   min-width: 0;
+  flex: 1;
   gap: 3px;
+}
+
+.knowledge-document-checkbox {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding-top: 2px;
 }
 
 .knowledge-document-title strong,
@@ -4747,6 +4822,7 @@ body {
 .knowledge-status.failed { border-color: rgba(248, 81, 73, .38); background: rgba(248, 81, 73, .12); color: #ff9b93; }
 .knowledge-status.processing { border-color: rgba(18, 189, 213, .38); background: var(--proto-cyan-soft); color: var(--proto-cyan); }
 .knowledge-status.deleting { border-color: rgba(210, 153, 34, .38); background: rgba(210, 153, 34, .12); color: #eac66b; }
+.knowledge-status.purging { border-color: rgba(210, 153, 34, .38); background: rgba(210, 153, 34, .12); color: #eac66b; }
 
 .knowledge-progress {
   display: grid;

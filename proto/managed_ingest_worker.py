@@ -16,7 +16,7 @@ from pathlib import Path
 
 import fitz
 
-from db_helpers import result_single
+from db_helpers import result_single, result_to_dicts
 from knowledge_service import purge_document, queue_health
 from proto.db_proto import proto_db
 from proto.ingest import (
@@ -82,7 +82,7 @@ class ManagedIngestWorker:
             )
             self.last_health_log = time.monotonic()
 
-    def recover_expired_leases(self) -> None:
+    def recover_expired_leases(self) -> int:
         now = iso()
         proto_db.write(
             """
@@ -94,18 +94,27 @@ class ManagedIngestWorker:
             """,
             {"now": now},
         )
-        deleting = result_single(
-            proto_db.query(
+        deleting = result_to_dicts(
+            proto_db.write(
                 """
-                MATCH (d:Document {status: 'deleting'})-[:CURRENT_JOB]->(j:IngestionJob)
-                WHERE j.lease_expires_at IS NULL OR j.lease_expires_at < $now
-                RETURN d.id AS id LIMIT 1
+                MATCH (d:Document {status: 'deleting'})
+                OPTIONAL MATCH (d)-[:CURRENT_JOB]->(j:IngestionJob)
+                WITH d, j
+                WHERE coalesce(d.deletion_not_before, '') <= $now
+                  AND (j IS NULL OR j.status <> 'processing'
+                       OR j.lease_expires_at IS NULL OR j.lease_expires_at < $now)
+                WITH DISTINCT d
+                ORDER BY d.updated_at, d.id
+                LIMIT 25
+                SET d.status = 'purging', d.phase = 'purging', d.updated_at = $now
+                RETURN d.id AS id
                 """,
                 {"now": now},
             )
         )
-        if deleting:
-            purge_document(deleting["id"])
+        for document in deleting:
+            purge_document(document["id"])
+        return len(deleting)
 
     def claim(self) -> dict | None:
         now = utc_now()
@@ -307,10 +316,10 @@ class ManagedIngestWorker:
 
     def run_once(self) -> bool:
         self.heartbeat()
-        self.recover_expired_leases()
+        deleted_count = self.recover_expired_leases()
         job = self.claim()
         if not job:
-            return False
+            return deleted_count > 0
         try:
             self.process(job)
         except Exception as exc:

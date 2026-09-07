@@ -142,7 +142,70 @@ class UploadValidationTests(unittest.TestCase):
             self.assertEqual(list(Path(tmp).rglob("*.tmp")), [])
 
 
+class BulkDeleteTests(unittest.TestCase):
+    def test_bulk_delete_validates_the_full_machine_scoped_batch_before_queueing(self):
+        accessible = QueryResult(
+            ["id", "name", "status"],
+            [["doc-1", "One", "ready"], ["doc-2", "Two", "failed"]],
+        )
+        with patch.object(knowledge_service, "_managed_machine"), \
+             patch.object(knowledge_service.proto_db, "query", return_value=accessible), \
+             patch.object(knowledge_service.proto_db, "write") as write, \
+             patch.object(knowledge_service, "_audit") as audit:
+            result = knowledge_service.queue_documents_for_deletion(
+                "machine-1", ["doc-1", "doc-2", "doc-1"], principal("all_clients")
+            )
+
+        self.assertEqual(result["accepted"], 2)
+        self.assertEqual(result["document_ids"], ["doc-1", "doc-2"])
+        self.assertEqual(write.call_count, 1)
+        self.assertIn("d.status = 'deleting'", write.call_args.args[0])
+        self.assertIn("d.deletion_not_before", write.call_args.args[0])
+        self.assertEqual(result["undo_seconds"], 60)
+        audit.assert_called_once()
+
+    def test_bulk_delete_rejects_a_partial_or_cross_machine_match_without_writes(self):
+        accessible = QueryResult(["id", "name"], [["doc-1", "One"]])
+        with patch.object(knowledge_service, "_managed_machine"), \
+             patch.object(knowledge_service.proto_db, "query", return_value=accessible), \
+             patch.object(knowledge_service.proto_db, "write") as write:
+            with self.assertRaises(HTTPException) as ctx:
+                knowledge_service.queue_documents_for_deletion(
+                    "machine-1", ["doc-1", "doc-other"], principal("all_clients")
+                )
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        write.assert_not_called()
+
+    def test_bulk_delete_cancel_restores_every_unclaimed_document(self):
+        restored = QueryResult(["restored"], [[1876]])
+        with patch.object(knowledge_service, "_managed_machine"), \
+             patch.object(knowledge_service.proto_db, "write", return_value=restored) as write, \
+             patch.object(knowledge_service, "_audit"):
+            result = knowledge_service.cancel_queued_document_deletions(
+                "machine-1", principal("all_clients")
+            )
+
+        self.assertEqual(result, {"restored": 1876})
+        self.assertIn("d.status = 'deleting'", write.call_args.args[0])
+        self.assertIn("REMOVE d.delete_previous_status", write.call_args.args[0])
+
+
 class WorkerStateTests(unittest.TestCase):
+    def test_worker_drains_queued_deletions_in_batches(self):
+        worker = ManagedIngestWorker("test-worker")
+        deleting = QueryResult(["id"], [["doc-1"], ["doc-2"]])
+        with patch.object(
+            knowledge_service.proto_db,
+            "write",
+            side_effect=[QueryResult([], []), deleting],
+        ), \
+             patch("proto.managed_ingest_worker.purge_document") as purge:
+            count = worker.recover_expired_leases()
+
+        self.assertEqual(count, 2)
+        self.assertEqual([call.args[0] for call in purge.call_args_list], ["doc-1", "doc-2"])
+
     def test_recent_processing_progress_suppresses_queue_stall(self):
         now = datetime(2026, 8, 31, 10, 0, tzinfo=timezone.utc)
         health = {

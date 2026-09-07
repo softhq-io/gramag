@@ -9,7 +9,7 @@ import re
 import shutil
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import fitz
@@ -24,6 +24,8 @@ from proto.db_proto import proto_db
 
 MANAGER_ROLES = {"superadmin", "all_clients"}
 MAX_UPLOAD_BYTES = int(os.getenv("KNOWLEDGE_MAX_UPLOAD_BYTES", str(250 * 1024 * 1024)))
+MAX_BULK_DELETE_DOCUMENTS = 5000
+BULK_DELETE_UNDO_SECONDS = 60
 DOCUMENT_ROOT = Path(os.getenv("KNOWLEDGE_DOCUMENT_ROOT", "/data/managed-documents"))
 APP_DATA_ROOT = Path(os.getenv("APP_DATA_ROOT", "/data"))
 QUEUE_STALL_SECONDS = int(os.getenv("KNOWLEDGE_QUEUE_STALL_SECONDS", "600"))
@@ -786,6 +788,127 @@ def delete_document(document_id: str, user: dict) -> bool:
         {"id": document_id, "now": now_iso()},
     )
     return purge_document(document_id)
+
+
+def queue_documents_for_deletion(
+    machine_id: str, document_ids: list[str], user: dict
+) -> dict:
+    """Validate and queue a machine-scoped document batch for worker deletion."""
+    require_knowledge_manager(user)
+    _managed_machine(machine_id)
+    unique_ids = list(
+        dict.fromkeys(
+            document_id.strip() for document_id in document_ids if document_id.strip()
+        )
+    )
+    if not unique_ids:
+        raise HTTPException(status_code=422, detail="Select at least one document")
+    if len(unique_ids) > MAX_BULK_DELETE_DOCUMENTS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"A maximum of {MAX_BULK_DELETE_DOCUMENTS} documents can be deleted at once",
+        )
+
+    accessible = result_to_dicts(
+        proto_db.query(
+            """
+            MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)-[:HAS_DOCUMENT]->(d:Document)
+            WHERE coalesce(c.active, false) AND coalesce(m.selected, false)
+              AND (m.erp_id = $machine_id OR 'legacy:' + m.slug = $machine_id)
+              AND d.id IN $document_ids
+            RETURN d.id AS id, d.name AS name, d.status AS status
+            """,
+            {"machine_id": machine_id, "document_ids": unique_ids},
+        )
+    )
+    accessible_ids = {row["id"] for row in accessible}
+    if accessible_ids != set(unique_ids):
+        raise HTTPException(
+            status_code=404,
+            detail="One or more documents were not found for this machine",
+        )
+    unavailable_ids = [
+        row["id"]
+        for row in accessible
+        if row.get("status") in {"processing", "deleting", "purging"}
+    ]
+    if unavailable_ids:
+        raise HTTPException(
+            status_code=409,
+            detail="Processing or already deleting documents cannot be included in a bulk deletion",
+        )
+
+    requested_at = datetime.now(timezone.utc)
+    timestamp = requested_at.isoformat()
+    delete_after = (requested_at + timedelta(seconds=BULK_DELETE_UNDO_SECONDS)).isoformat()
+    proto_db.write(
+        """
+        MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)-[:HAS_DOCUMENT]->(d:Document)
+        WHERE coalesce(c.active, false) AND coalesce(m.selected, false)
+          AND (m.erp_id = $machine_id OR 'legacy:' + m.slug = $machine_id)
+          AND d.id IN $document_ids
+        SET d.delete_previous_status = d.status,
+            d.delete_previous_phase = d.phase,
+            d.delete_previous_error_message = d.error_message,
+            d.status = 'deleting', d.phase = 'deleting', d.error_message = NULL,
+            d.deletion_requested_at = $now,
+            d.deletion_not_before = $delete_after,
+            d.updated_at = $now
+        """,
+        {
+            "machine_id": machine_id,
+            "document_ids": unique_ids,
+            "now": timestamp,
+            "delete_after": delete_after,
+        },
+    )
+    _audit(
+        user,
+        "documents_bulk_delete_queued",
+        "machine",
+        machine_id,
+        f"Queued {len(unique_ids)} documents for deletion",
+    )
+    return {
+        "accepted": len(unique_ids),
+        "document_ids": unique_ids,
+        "undo_seconds": BULK_DELETE_UNDO_SECONDS,
+        "deletion_not_before": delete_after,
+    }
+
+
+def cancel_queued_document_deletions(machine_id: str, user: dict) -> dict:
+    """Restore bulk-deletion documents that have not been claimed for purging."""
+    require_knowledge_manager(user)
+    _managed_machine(machine_id)
+    result = result_single(
+        proto_db.write(
+            """
+            MATCH (c:Customer)-[:HAS_MACHINE]->(m:Machine)-[:HAS_DOCUMENT]->(d:Document)
+            WHERE coalesce(c.active, false) AND coalesce(m.selected, false)
+              AND (m.erp_id = $machine_id OR 'legacy:' + m.slug = $machine_id)
+              AND d.status = 'deleting' AND d.deletion_not_before IS NOT NULL
+            SET d.status = coalesce(d.delete_previous_status, 'ready'),
+                d.phase = coalesce(d.delete_previous_phase, d.delete_previous_status, 'ready'),
+                d.error_message = d.delete_previous_error_message,
+                d.updated_at = $now
+            REMOVE d.delete_previous_status, d.delete_previous_phase,
+                   d.delete_previous_error_message, d.deletion_requested_at,
+                   d.deletion_not_before
+            RETURN count(d) AS restored
+            """,
+            {"machine_id": machine_id, "now": now_iso()},
+        )
+    )
+    restored = int((result or {}).get("restored") or 0)
+    _audit(
+        user,
+        "documents_bulk_delete_cancelled",
+        "machine",
+        machine_id,
+        f"Restored {restored} documents",
+    )
+    return {"restored": restored}
 
 
 def _parse_timestamp(value: str | None) -> datetime | None:

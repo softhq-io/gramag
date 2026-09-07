@@ -5,12 +5,14 @@ from pydantic import BaseModel
 
 from auth import get_current_user
 from knowledge_service import (
+    cancel_queued_document_deletions,
     create_uploaded_document,
     delete_document,
     get_document,
     list_client_machines,
     list_clients,
     list_documents,
+    queue_documents_for_deletion,
     queue_health,
     retry_document,
     set_client_active,
@@ -27,6 +29,10 @@ class ClientStateRequest(BaseModel):
 
 class MachineStateRequest(BaseModel):
     selected: bool
+
+
+class BulkDocumentDeleteRequest(BaseModel):
+    document_ids: list[str]
 
 
 @router.get("/clients")
@@ -75,6 +81,23 @@ async def upload_document(
     user: dict = Depends(get_current_user),
 ):
     return await create_uploaded_document(machine_id, category, file, user)
+
+
+@router.post("/machines/{machine_id}/documents/bulk-delete", status_code=202)
+def bulk_delete_documents(
+    machine_id: str,
+    req: BulkDocumentDeleteRequest,
+    user: dict = Depends(get_current_user),
+):
+    return queue_documents_for_deletion(machine_id, req.document_ids, user)
+
+
+@router.post("/machines/{machine_id}/documents/bulk-delete/cancel")
+def cancel_bulk_delete_documents(
+    machine_id: str,
+    user: dict = Depends(get_current_user),
+):
+    return cancel_queued_document_deletions(machine_id, user)
 
 
 @router.get("/documents/{document_id}")

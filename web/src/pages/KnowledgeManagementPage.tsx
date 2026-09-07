@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import {
+  bulkDeleteManagedDocuments,
+  cancelBulkDeleteManagedDocuments,
   deleteManagedDocument,
   listKnowledgeClients,
   listKnowledgeMachines,
@@ -40,6 +42,8 @@ export function KnowledgeManagementPage() {
   const [category, setCategory] = useState('Documents')
   const [files, setFiles] = useState<File[]>([])
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [uploadErrors, setUploadErrors] = useState<string[]>([])
@@ -55,6 +59,16 @@ export function KnowledgeManagementPage() {
     [machines],
   )
   const selectedMachineCount = machines.filter(machine => machine.selected).length
+  const selectableDocumentIds = useMemo(
+    () => documents
+      .filter(document => !['processing', 'deleting', 'purging'].includes(document.status))
+      .map(document => document.id),
+    [documents],
+  )
+  const pendingDeletionCount = documents.filter(document => document.status === 'deleting').length
+  const selectedDocumentIdSet = useMemo(() => new Set(selectedDocumentIds), [selectedDocumentIds])
+  const allDocumentsSelected = selectableDocumentIds.length > 0
+    && selectableDocumentIds.every(id => selectedDocumentIdSet.has(id))
   const uploadButtonLabel = busy
     ? 'Uploading…'
     : files.length === 0
@@ -83,9 +97,17 @@ export function KnowledgeManagementPage() {
   const loadDocuments = useCallback(async () => {
     if (!machineId) {
       setDocuments([])
+      setSelectedDocumentIds([])
       return
     }
-    setDocuments(await listManagedDocuments(machineId))
+    const rows = await listManagedDocuments(machineId)
+    const availableIds = new Set(
+      rows
+        .filter(document => !['processing', 'deleting', 'purging'].includes(document.status))
+        .map(document => document.id),
+    )
+    setDocuments(rows)
+    setSelectedDocumentIds(current => current.filter(id => availableIds.has(id)))
   }, [machineId])
 
   useEffect(() => {
@@ -103,6 +125,7 @@ export function KnowledgeManagementPage() {
   }, [loadMachines])
 
   useEffect(() => {
+    setSelectedDocumentIds([])
     loadDocuments().catch(err => setError(errorMessage(err)))
   }, [loadDocuments])
 
@@ -213,10 +236,67 @@ export function KnowledgeManagementPage() {
     if (!window.confirm(`Permanently delete “${document.name}” and its searchable content?`)) return
     try {
       await deleteManagedDocument(document.id)
+      setSelectedDocumentIds(current => current.filter(id => id !== document.id))
       await loadDocuments()
       await loadMachines()
     } catch (err) {
       setError(errorMessage(err))
+    }
+  }
+
+  function toggleDocument(documentId: string) {
+    setSelectedDocumentIds(current => (
+      current.includes(documentId)
+        ? current.filter(id => id !== documentId)
+        : [...current, documentId]
+    ))
+  }
+
+  function toggleAllDocuments() {
+    setSelectedDocumentIds(allDocumentsSelected ? [] : selectableDocumentIds)
+  }
+
+  async function removeSelectedDocuments() {
+    if (!machineId || selectedDocumentIds.length === 0) return
+    const count = selectedDocumentIds.length
+    const machineName = selectedMachine?.name || machineId
+    if (!window.confirm(
+      `Permanently delete ${count} selected document${count === 1 ? '' : 's'} from “${machineName}” and remove all searchable content?`,
+    )) return
+    setBulkDeleting(true)
+    setError('')
+    try {
+      await bulkDeleteManagedDocuments(machineId, selectedDocumentIds)
+      const deletingIds = new Set(selectedDocumentIds)
+      setDocuments(current => current.map(document => (
+        deletingIds.has(document.id)
+          ? { ...document, status: 'deleting', phase: 'deleting', error_message: null }
+          : document
+      )))
+      setSelectedDocumentIds([])
+      await loadMachines()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  async function stopPendingDeletion() {
+    if (!machineId || pendingDeletionCount === 0) return
+    setBulkDeleting(true)
+    setError('')
+    try {
+      const result = await cancelBulkDeleteManagedDocuments(machineId)
+      if (result.restored === 0) {
+        setError('Deletion had already started; no pending documents could be restored.')
+      }
+      await loadDocuments()
+      await loadMachines()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBulkDeleting(false)
     }
   }
 
@@ -335,6 +415,40 @@ export function KnowledgeManagementPage() {
             </div>
           )}
 
+          {selectedMachine && documents.length > 0 && (
+            <div className="knowledge-document-toolbar">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={allDocumentsSelected}
+                  disabled={bulkDeleting || selectableDocumentIds.length === 0}
+                  onChange={toggleAllDocuments}
+                />
+                Select all
+              </label>
+              <span>
+                {selectedDocumentIds.length} selected
+                {pendingDeletionCount > 0 ? ` · ${pendingDeletionCount} pending (60-second undo)` : ''}
+              </span>
+              {pendingDeletionCount > 0 && (
+                <button
+                  className="undo"
+                  disabled={bulkDeleting}
+                  onClick={stopPendingDeletion}
+                >
+                  Stop deletion ({pendingDeletionCount})
+                </button>
+              )}
+              <button
+                className="danger"
+                disabled={bulkDeleting || selectedDocumentIds.length === 0}
+                onClick={removeSelectedDocuments}
+              >
+                {bulkDeleting ? 'Queueing deletion…' : 'Delete selected'}
+              </button>
+            </div>
+          )}
+
           <div className="knowledge-document-list">
             {selectedMachine && documents.length === 0 && pendingUploads.length === 0 && <div className="knowledge-empty">No documents yet.</div>}
             {pendingUploads.map(upload => (
@@ -357,13 +471,22 @@ export function KnowledgeManagementPage() {
             {documents.map(document => (
               <article className={`knowledge-document ${document.status === 'ready' ? 'compact' : ''}`} key={document.id}>
                 <div className="knowledge-document-title">
+                  <label className="knowledge-document-checkbox">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${document.name}`}
+                      checked={selectedDocumentIdSet.has(document.id)}
+                      disabled={bulkDeleting || ['processing', 'deleting', 'purging'].includes(document.status)}
+                      onChange={() => toggleDocument(document.id)}
+                    />
+                  </label>
                   <div>
                     <strong>{document.name}</strong>
                     <small>{document.category} · {formatBytes(document.size)} · {document.source === 'upload' ? 'Uploaded' : 'Legacy SharePoint'}</small>
                   </div>
                   <span className={`knowledge-status ${document.status}`}>{document.status}</span>
                 </div>
-                {!TERMINAL.has(document.status) && document.status !== 'deleting' && (
+                {!TERMINAL.has(document.status) && !['deleting', 'purging'].includes(document.status) && (
                   <div className="knowledge-progress">
                     <div><span style={{ width: progressWidth(document) }} /></div>
                     <small>{phaseLabel(document)}{document.queue_position ? ` · queue position ${document.queue_position}` : ''}{document.progress_total ? ` · ${document.progress_current}/${document.progress_total}` : ''}</small>
@@ -373,8 +496,8 @@ export function KnowledgeManagementPage() {
                 <div className="knowledge-document-actions">
                   {document.status === 'ready' && <a aria-label={`Open ${document.name}`} href={`/api/proto/view/${encodeURIComponent(document.id)}`} target="_blank" rel="noreferrer">Open</a>}
                   {document.status === 'ready' && <a aria-label={`Download ${document.name}`} href={`/api/proto/document/${encodeURIComponent(document.id)}?download=true`}>Download</a>}
-                  {document.status === 'failed' && document.phase !== 'delete_failed' && <button aria-label={`Retry ${document.name}`} onClick={() => retry(document)}>Retry</button>}
-                  <button aria-label={`Permanently delete ${document.name}`} className="danger" disabled={document.status === 'deleting'} onClick={() => remove(document)}>Delete</button>
+                  {document.status === 'failed' && document.phase !== 'delete_failed' && <button disabled={bulkDeleting} aria-label={`Retry ${document.name}`} onClick={() => retry(document)}>Retry</button>}
+                  <button aria-label={`Permanently delete ${document.name}`} className="danger" disabled={bulkDeleting || ['deleting', 'purging'].includes(document.status)} onClick={() => remove(document)}>Delete</button>
                 </div>
               </article>
             ))}
