@@ -8,6 +8,11 @@ from proto import erp_context
 
 
 class ProtoErpContextTests(unittest.TestCase):
+    def test_answer_prompt_matches_user_language_with_german_fallback(self):
+        self.assertIn("same language as the user's question", answer.SYSTEM_PROMPT)
+        self.assertIn("default to German", answer.SYSTEM_PROMPT)
+        self.assertNotIn("Polish", answer.SYSTEM_PROMPT)
+
     def test_chat_answer_includes_erp_context_without_document_hits(self):
         captured = {}
         erp = {
@@ -61,7 +66,7 @@ class ProtoErpContextTests(unittest.TestCase):
                 machine_slug="low-confidence",
             )
 
-        self.assertIn("Brak wyników", result["answer"])
+        self.assertIn("Keine Ergebnisse", result["answer"])
         self.assertIsNone(result["erp_context"])
         chat.assert_not_called()
 

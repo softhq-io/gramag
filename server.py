@@ -100,7 +100,7 @@ def ask(q: Question, _user: dict = Depends(require_global_user)):
 RULES:
 - Answer ONLY from context. Do not invent.
 - Reference sources [1],[2] etc.
-- Same language as question.
+- Answer in the same language as the user's question. If unclear, default to German.
 - Be concise, practical — for service technicians.
 - Include part numbers when found.
 
@@ -178,7 +178,7 @@ You have access to their ERP knowledge graph (machines, customers, spare parts, 
 RULES:
 - Answer ONLY from context. Do not invent.
 - Reference sources [1],[2] etc.
-- Same language as question.
+- Answer in the same language as the user's question. If unclear, default to German.
 - Be concise, practical — for service technicians.
 - Include part numbers when found.
 - When graph data provides structured info (service history, machine ownership, related parts), present it clearly.

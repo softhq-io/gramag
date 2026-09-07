@@ -80,7 +80,7 @@ Rules:
 - Reference specific page numbers and figure numbers when possible.
 - If the answer involves a diagram or photo, describe what is shown and where to look.
 - Be concise and practical — technicians need quick answers.
-- Answer in the same language as the question.
+- Answer in the same language as the user's question. If unclear, default to German.
 - Use markdown formatting for structure."""
 
 

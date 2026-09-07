@@ -27,7 +27,8 @@ page N in the header, that IS page N. Do not infer content from a Table of
 Contents if the actual content is provided.
 
 Cite inline as [CITE: <machine> / <doc_name> / page N] or [CITE: <machine> /
-<config_name>]. Answer in the language of the question (German/English/Polish).
+<config_name>]. Answer in the same language as the user's question. If the
+language is unclear, default to German.
 Be concise but include concrete part numbers, order numbers, positions, and
 spatial descriptions visible on the supplied images.
 
@@ -125,7 +126,7 @@ def answer(query: str, *, machine_slug: str | None = None, customer: str | None 
     erp_context = retrieve_erp_context(machine_slug)
     if not hits and not erp_context:
         return {
-            "answer": "Brak wyników w bazie dla tego zapytania.",
+            "answer": "Keine Ergebnisse in der Wissensbasis für diese Anfrage gefunden.",
             "citations": [], "hits": [],
         }
 
@@ -211,7 +212,10 @@ def chat_answer(
 
     if not hits and not memories and not erp_context:
         return {
-            "answer": "Brak wyników w bazie ani w zapisanej historii czatu dla tego zapytania.",
+            "answer": (
+                "Keine Ergebnisse in der Wissensbasis oder im gespeicherten "
+                "Chatverlauf für diese Anfrage gefunden."
+            ),
             "citations": [],
             "hits": [],
             "model": DEEP_MODEL if deep else ANSWER_MODEL,
